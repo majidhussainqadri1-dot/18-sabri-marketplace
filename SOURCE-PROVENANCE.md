@@ -10,4 +10,4 @@
 - Imported for: Sabri Social Homeopathy Platform
 - Founder: Dr. Allamah Majid Hussain Sabri Muhaddith Mursheed
 
-This import preserves the supplied package as the baseline source. It does not by itself certify production readiness, security, staging acceptance, or operational completeness.
+The archive is preserved byte-for-byte under `original-package/`. Its checksum must remain unchanged. Baseline import does not certify production readiness, security, staging acceptance, or operational completeness.
