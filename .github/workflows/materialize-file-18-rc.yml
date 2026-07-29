@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-candidate
-          cat release-candidate/.parts/part-* > /tmp/file18.b64
+          cat release-candidate/.parts/part-* | tr -d '[:space:]' > /tmp/file18.b64
           base64 --decode /tmp/file18.b64 > release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
           echo '99483d3d33ee62beb005b5a164237fda5f5bd5405e761c8edeb35eb511c8539b  release-candidate/18-sabri-marketplace-1.2.0-RC1.zip' | sha256sum -c -
           unzip -tq release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
