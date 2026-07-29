@@ -1,0 +1,79 @@
+name: File 18 Baseline Integrity
+
+on:
+  push:
+    branches:
+      - main
+      - baseline/file-18-original-import
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Verify original archive checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive='original-package/18 sabri-marketplace-1.1.0.zip'
+          test -f "$archive"
+          printf '%s  %s\n' \
+            '7140ec5a0a41d880f2a8609d5c07f0b84b64b4b5674d9e167458eb76519f1b30' \
+            "$archive" | sha256sum -c -
+
+      - name: Validate ZIP structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive='original-package/18 sabri-marketplace-1.1.0.zip'
+          unzip -t "$archive"
+          rm -rf build
+          mkdir -p build
+          unzip -q "$archive" -d build
+          test -d build/sabri-marketplace
+          test "$(find build/sabri-marketplace -type f | wc -l | tr -d ' ')" = '17'
+          test -f build/sabri-marketplace/sabri-marketplace.php
+          test -f build/sabri-marketplace/assets/js/marketplace.js
+          test -f build/sabri-marketplace/assets/css/marketplace.css
+
+      - name: Verify declared version
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Version: 1.1.0' build/sabri-marketplace/sabri-marketplace.php
+          grep -Fq "define('SMP_VERSION', '1.1.0');" build/sabri-marketplace/sabri-marketplace.php
+          grep -Fq 'Stable tag: 1.1.0' build/sabri-marketplace/readme.txt
+
+      - name: Lint PHP files
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            php -l "$file"
+          done < <(find build/sabri-marketplace -type f -name '*.php' -print0 | sort -z)
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: node --check build/sabri-marketplace/assets/js/marketplace.js
+
+      - name: Reject unsafe archive paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive='original-package/18 sabri-marketplace-1.1.0.zip'
+          if unzip -Z1 "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$)|^[A-Za-z]:)'; then
+            echo 'Unsafe absolute or traversal path detected.' >&2
+            exit 1
+          fi
