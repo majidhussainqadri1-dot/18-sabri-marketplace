@@ -34,13 +34,29 @@ jobs:
           php-version: '8.3'
           coverage: none
 
-      - name: Reconstruct and verify corrected package
+      - name: Reconstruct corrected package
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-candidate
           cat release-candidate/.parts/part-* | tr -d '[:space:]' > /tmp/file18.b64
           base64 --decode /tmp/file18.b64 > release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
+          wc -c /tmp/file18.b64 release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
+          sha256sum release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
+
+      - name: Preserve reconstruction diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: file18-reconstruction-diagnostics-${{ github.run_id }}
+          path: |
+            /tmp/file18.b64
+            release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
+          retention-days: 1
+
+      - name: Verify exact corrected package
+        shell: bash
+        run: |
+          set -euo pipefail
           echo '99483d3d33ee62beb005b5a164237fda5f5bd5405e761c8edeb35eb511c8539b  release-candidate/18-sabri-marketplace-1.2.0-RC1.zip' | sha256sum -c -
           unzip -tq release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
 
