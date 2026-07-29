@@ -1,0 +1,44 @@
+SABRI MARKETPLACE 1.1.0 — SYSTEM STATUS
+
+Mode: Direct Buyer–Seller Deal
+Payments held by platform: No
+Cart/Checkout workflow: Disabled from main interface
+Phone fields: Buyer + Seller
+WhatsApp fields: Buyer + Seller
+Internal chat: Included
+
+Database tables created/upgraded:
+- smp_sellers
+- smp_products
+- smp_wishlist
+- smp_conversations
+- smp_messages
+- smp_message_reactions
+- smp_blocks
+- smp_reports
+- smp_notifications
+- smp_audit_log
+
+Chat capabilities:
+- Product-linked one-to-one chat
+- Text
+- Image/document/audio/video attachment
+- Voice recording in supported HTTPS browsers
+- Offer/counter-offer/accept/reject
+- Contact sharing
+- Reply/edit/delete/reactions
+- Delivered/read status
+- Typing indicator
+- Online/last-seen approximation
+- Block/report
+- Admin moderation of reported references
+
+External services not required for core web chat:
+- No SMS provider required for this plugin update
+- No external WebSocket server required; chat uses secure AJAX polling
+- No payment gateway required
+
+External conditions:
+- HTTPS required for microphone recording
+- Browser notification push is not included; in-app notifications are included
+- Phone and WhatsApp actions depend on the user's device/browser
