@@ -1,0 +1,10 @@
+1.1.0 سے 1.2.0 اپ گریڈ
+
+- مکمل database اور files/private storage backup پہلے لازم ہے۔
+- legacy seller identity values File 00 cryptography سے encrypted ہوں گی۔
+- پرانی local notifications File 19 میں dedupe keys کے ساتھ منتقل ہوں گی؛ local table نئی notifications کے لیے استعمال نہیں ہوگا۔
+- پرانی chat attachments public uploads سے encrypted private storage میں منتقل ہوں گی۔
+- seller approval اب File 00 کی approved membership اور verified mobile کے بغیر ممکن نہیں۔
+- health/restricted listings verified professional license کے بغیر publish نہیں ہوسکتیں۔
+- draft/rejected/suspended/paused/sold listings پر direct ID کے ذریعے chat/contact/wishlist نہیں ہوگا۔
+- upgrade کے بعد System Check، دو حقیقی accounts، migration verification اور rollback restoration لازماً آزمائیں۔
