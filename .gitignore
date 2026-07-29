@@ -1,0 +1,17 @@
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Build and dependency artifacts
+node_modules/
+vendor/
+*.log
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example

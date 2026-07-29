@@ -1,0 +1,56 @@
+name: Extract Exact File 18 Baseline
+
+on:
+  push:
+    branches:
+      - baseline/file-18-original-import
+    paths:
+      - .github/workflows/extract-baseline.yml
+
+permissions:
+  contents: write
+
+jobs:
+  extract-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out baseline branch
+        uses: actions/checkout@v4
+        with:
+          ref: baseline/file-18-original-import
+          fetch-depth: 0
+
+      - name: Extract the preserved original archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive='original-package/18 sabri-marketplace-1.1.0.zip'
+          test -f "$archive"
+          rm -rf baseline-source/sabri-marketplace
+          mkdir -p baseline-source
+          unzip -q "$archive" -d baseline-source
+          test -d baseline-source/sabri-marketplace
+          count="$(find baseline-source/sabri-marketplace -type f | wc -l | tr -d ' ')"
+          test "$count" = '17'
+
+      - name: Verify every extracted file against the frozen checksum manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd baseline-source/sabri-marketplace
+          sha256sum -c ../../CHECKSUMS.sha256
+
+      - name: Commit the exact browseable baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add baseline-source/sabri-marketplace
+          if git diff --cached --quiet; then
+            echo 'The browseable baseline is already exact and complete.'
+            exit 0
+          fi
+          git commit -m 'Complete exact 17-file File 18 baseline extraction'
+          git push origin HEAD:baseline/file-18-original-import

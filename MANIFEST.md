@@ -1,0 +1,25 @@
+# File 18 Manifest
+
+- `.github/workflows/baseline-integrity.yml`
+- `.gitignore`
+- `CHECKSUMS.sha256`
+- `INSTALLATION-URDU.txt`
+- `LICENSE.txt`
+- `MANIFEST.md`
+- `SOURCE-PROVENANCE.md`
+- `STATUS.md`
+- `SYSTEM-STATUS.txt`
+- `UPGRADE-URDU.txt`
+- `assets/css/marketplace.css`
+- `assets/js/marketplace.js`
+- `includes/class-smp-activator.php`
+- `includes/class-smp-admin.php`
+- `includes/class-smp-ajax.php`
+- `includes/class-smp-db.php`
+- `includes/class-smp-rest.php`
+- `includes/class-smp-shortcode.php`
+- `includes/class-smp-utils.php`
+- `readme.txt`
+- `sabri-marketplace.php`
+- `templates/marketplace-app.php`
+- `templates/marketplace-standalone.php`

@@ -1,0 +1,90 @@
+صابری مارکیٹ پلیس 1.1.0
+Direct Buyer–Seller Deal + Phone + WhatsApp + Complete Internal Chat
+
+مرکزی اصول
+خریدار اور فروخت کنندہ خود بات کرکے قیمت، ادائیگی، معائنہ، سامان لینے یا دینے کی جگہ، Pickup، Courier اور Delivery طے کریں گے۔ Platform کسی Transaction کی رقم وصول یا hold نہیں کرتا۔
+
+اہم Front-End حصے
+- Marketplace Home
+- Categories
+- Services
+- Used Products
+- Wholesale
+- Sell
+- My Chats
+- Saved
+- My Store
+- Account
+- Help
+
+Seller Contact
+- Primary Phone لازمی
+- Alternative Phone اختیاری
+- WhatsApp لازمی
+- Phone display permission
+- WhatsApp display permission
+- Calls permission
+- Offers permission
+- Preferred contact method
+- Call hours
+
+Buyer Contact
+- Phone لازمی
+- WhatsApp لازمی
+- Preferred contact method
+- Seller calls permission
+- Phone/WhatsApp chat sharing permission
+- Quiet hours
+
+Internal Chat
+- One-to-one Product-linked conversation
+- Text
+- Image
+- PDF and documents
+- Voice note
+- Video attachment
+- Offer, accept, reject and counter-offer
+- Phone and WhatsApp sharing
+- Reply
+- Edit
+- Delete for both parties
+- Reactions
+- Sent/Delivered/Read indicators
+- Typing and presence
+- Unread counts
+- Deal status
+- Block
+- Report
+- Admin moderation
+
+Admin Menus
+- Marketplace Overview
+- Sellers
+- Listings
+- Chats & Reports
+- Settings
+- System Check
+
+System Check
+Marketplace → System Check → Complete Repair
+یہ database tables، settings اور Marketplace page کو repair کرتا ہے۔
+
+Shortcode
+[sabri_marketplace]
+
+Public Page
+عام طور پر: /marketplace/
+آپ کی مرکزی website navigation کسی پرانے /homeopathy-marketplace/ Page کو کھولتی ہو تو اس Page کے اندر بھی یہی shortcode رکھا جاسکتا ہے۔
+
+Security
+- Nonce-protected AJAX
+- Participant-only conversation access
+- Private attachment proxy
+- Random private filenames
+- Attachment type and size restrictions
+- Block/report controls
+- Admin audit logs
+- Logged-in contact reveal
+
+Production Test
+کم از کم دو الگ User accounts اور دو مختلف browsers/devices سے مکمل Buyer–Seller test کریں۔

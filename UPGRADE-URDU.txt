@@ -1,0 +1,78 @@
+صابری مارکیٹ پلیس 1.1.0 — محفوظ اپ گریڈ ہدایات
+
+یہ ZIP موجودہ Sabri Marketplace 1.0.0 کو اپ ڈیٹ کرنے کے لیے ہے۔ Plugin folder اور shortcode وہی رہیں گے:
+
+Plugin folder: sabri-marketplace
+Shortcode: [sabri_marketplace]
+Version: 1.1.0
+
+بنیادی تبدیلی
+Marketplace اب Direct-Deal نظام ہے۔ خریدار اور فروخت کنندہ قیمت، ادائیگی، معائنہ، Pickup، Courier اور Delivery باہمی گفتگو سے خود طے کریں گے۔ Platform رقم وصول، محفوظ یا Seller کو منتقل نہیں کرے گا۔
+
+اپ گریڈ سے پہلے
+1. UpdraftPlus سے مکمل Database اور Plugins backup لیں۔
+2. موجودہ Marketplace Page حذف نہ کریں۔
+3. اس Page کا shortcode [sabri_marketplace] برقرار رکھیں۔
+4. پہلے Staging پر آزمائش بہتر ہے۔
+
+تنصیب
+1. WordPress Dashboard → Plugins → Add Plugin → Upload Plugin
+2. sabri-marketplace-1.1.0.zip منتخب کریں۔
+3. Install Now دبائیں۔
+4. WordPress موجودہ Plugin پہچانے تو Replace current with uploaded منتخب کریں۔
+5. Plugin Active رکھیں۔
+6. Marketplace → System Check کھولیں۔
+7. Complete Repair دبائیں۔
+8. LiteSpeed Cache اور Hostinger Cache صاف کریں۔
+9. Incognito میں Marketplace کھولیں۔
+
+اپ گریڈ کے بعد لازمی ترتیب
+1. Seller اپنے Seller Profile میں Phone اور WhatsApp نمبر محفوظ کرے۔
+2. Admin Marketplace → Sellers میں Seller کو approve کرے۔
+3. Buyer Marketplace → Account میں Phone اور WhatsApp نمبر محفوظ کرے۔
+4. Seller Listing بنائے اور Admin اسے approve کرے۔
+5. دو الگ User accounts سے Chat with Seller آزمائیں۔
+6. Text، image، PDF/document، voice note، offer، contact sharing، delivered/read status، block اور report آزمائیں۔
+
+محفوظ رہنے والا سابقہ Data
+- Seller records
+- Product/listing records
+- Wishlist records
+- Marketplace Page اور shortcode
+- سابقہ database tables حذف نہیں کیے جاتے
+
+غیر فعال تجارتی حصے
+- Cart
+- Checkout
+- Platform payment
+- Wallet
+- Escrow
+- Seller payout
+- Platform refund processing
+
+نیا رابطہ نظام
+- Seller Phone
+- Seller WhatsApp
+- Buyer Phone
+- Buyer WhatsApp
+- Call Seller
+- WhatsApp Seller
+- Product-linked internal chat
+- Text messages
+- Images
+- Documents
+- Voice notes
+- Video attachment
+- Offers and counter-offers
+- Contact sharing
+- Sent, delivered and read status
+- Typing indicator
+- Online/last-seen indicator
+- Reactions
+- Reply, edit and delete
+- Block and report
+- Admin report moderation
+- Mark deal agreed, sold, completed or cancelled
+
+اہم نوٹ
+Voice notes کے لیے browser کو Microphone permission دینا ہوگی۔ HTTPS فعال ہونا لازم ہے۔
