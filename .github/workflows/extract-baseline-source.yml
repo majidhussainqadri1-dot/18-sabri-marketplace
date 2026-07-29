@@ -1,0 +1,47 @@
+name: Extract File 18 Baseline Source
+
+on:
+  push:
+    branches:
+      - baseline/file-18-original-import
+    paths:
+      - .github/workflows/extract-baseline-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out baseline branch
+        uses: actions/checkout@v4
+        with:
+          ref: baseline/file-18-original-import
+
+      - name: Verify and extract original package
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive='original-package/18 sabri-marketplace-1.1.0.zip'
+          printf '%s  %s\n' \
+            '7140ec5a0a41d880f2a8609d5c07f0b84b64b4b5674d9e167458eb76519f1b30' \
+            "$archive" | sha256sum -c -
+          rm -rf .baseline-extract
+          mkdir .baseline-extract
+          unzip -q "$archive" -d .baseline-extract
+          test "$(find .baseline-extract/sabri-marketplace -type f | wc -l | tr -d ' ')" = '17'
+          cp -a .baseline-extract/sabri-marketplace/. .
+          rm -rf .baseline-extract
+          rm .github/workflows/extract-baseline-source.yml
+
+      - name: Commit exact extracted source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Import exact File 18 marketplace source 1.1.0'
+          git push origin HEAD:baseline/file-18-original-import
