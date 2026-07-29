@@ -1,0 +1,75 @@
+name: Materialize File 18 Corrected Release Candidate
+
+on:
+  push:
+    branches:
+      - fix/file-18-security-integration-1.2.0
+    paths:
+      - .github/workflows/materialize-file-18-rc.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out corrective branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/file-18-security-integration-1.2.0
+          fetch-depth: 0
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Reconstruct and verify corrected package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-candidate
+          cat release-candidate/.parts/part-* > /tmp/file18.b64
+          base64 --decode /tmp/file18.b64 > release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
+          echo '99483d3d33ee62beb005b5a164237fda5f5bd5405e761c8edeb35eb511c8539b  release-candidate/18-sabri-marketplace-1.2.0-RC1.zip' | sha256sum -c -
+          unzip -tq release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
+
+      - name: Extract browseable corrected source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf sabri-marketplace
+          unzip -q release-candidate/18-sabri-marketplace-1.2.0-RC1.zip -d .
+          test -d sabri-marketplace
+          count="$(find sabri-marketplace -type f | wc -l | tr -d ' ')"
+          test "$count" = '25'
+          (
+            cd sabri-marketplace
+            find . -type f -print0 | sort -z | xargs -0 sha256sum
+          ) > CORRECTED-CHECKSUMS.sha256
+
+      - name: Run PHP, JavaScript, and static QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          find sabri-marketplace -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          node --check sabri-marketplace/assets/js/marketplace.js
+          bash sabri-marketplace/tests/qa-static.sh
+
+      - name: Commit verified source and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf release-candidate/.parts
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A sabri-marketplace release-candidate CORRECTED-CHECKSUMS.sha256
+          if git diff --cached --quiet; then
+            echo 'Corrected release candidate is already materialized.'
+            exit 0
+          fi
+          git commit -m 'Materialize and verify File 18 Marketplace 1.2.0 RC1'
+          git push origin HEAD:fix/file-18-security-integration-1.2.0
