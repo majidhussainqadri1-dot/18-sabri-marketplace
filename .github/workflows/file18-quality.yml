@@ -1,0 +1,59 @@
+name: File 18 Marketplace Quality
+
+on:
+  push:
+    branches:
+      - fix/file-18-security-integration-1.2.0
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: PHP ${{ matrix.php }} / Static QA
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.3']
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Verify corrected package checksum and integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '99483d3d33ee62beb005b5a164237fda5f5bd5405e761c8edeb35eb511c8539b  release-candidate/18-sabri-marketplace-1.2.0-RC1.zip' | sha256sum -c -
+          unzip -tq release-candidate/18-sabri-marketplace-1.2.0-RC1.zip
+
+      - name: Verify browseable source checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd sabri-marketplace
+          sha256sum -c ../CORRECTED-CHECKSUMS.sha256
+
+      - name: Lint PHP source
+        shell: bash
+        run: |
+          set -euo pipefail
+          find sabri-marketplace -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: node --check sabri-marketplace/assets/js/marketplace.js
+
+      - name: Run File 18 static security QA
+        shell: bash
+        run: bash sabri-marketplace/tests/qa-static.sh

@@ -1,0 +1,11 @@
+فائل 18 — Sabri Marketplace 1.2.0
+
+تنصیب کی لازمی ترتیب:
+1۔ پہلے File 00 Sabri Membership Core، File 19 Unified Notifications اور File 20 Unified Application Shell نصب و فعال ہوں۔
+2۔ File 00 کی production encryption key، مرکزی شناخت، mobile verification اور professional credentials workflows درست ہوں۔
+3۔ chat attachments کے لیے SMP_CLAMAV_COMMAND یا smp_attachment_scan_result filter کے ذریعے malware scanner قائم کیا جائے؛ scanner کے بغیر upload حفاظتی طور پر بند رہے گا۔
+4۔ بہتر صورت میں SMP_PRIVATE_STORAGE_DIR کو public webroot سے باہر writable directory پر مقرر کریں۔
+5۔ File 18 نصب کرکے Marketplace > System Check کھولیں اور Repair and Migrations چلائیں۔
+6۔ fresh install، upgrade، database/private-files rollback، حقیقی buyer/seller accounts، responsive/mobile، accessibility، notifications اور Hostinger staging acceptance مکمل کریں۔
+
+Live site پر staging acceptance اور بانی کی منظوری کے بغیر فعال نہ کریں۔

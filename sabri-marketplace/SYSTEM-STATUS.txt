@@ -1,0 +1,26 @@
+SABRI MARKETPLACE — FILE 18
+Version: 1.2.0 Corrective Release Candidate
+Policy: Direct buyer–seller; zero Marketplace commission; no escrow/wallet/payout/courier control.
+
+Owned database tables:
+- smp_sellers
+- smp_products
+- smp_wishlist
+- smp_conversations
+- smp_messages
+- smp_message_reactions
+- smp_blocks
+- smp_reports
+- smp_audit_log
+
+External mandatory services:
+- File 00 Membership Core: identity, mobile verification, professional credentials, encryption.
+- File 19 Unified Notifications: all new notification delivery and preferences.
+- File 20 Unified Application Shell: global navigation and layout.
+
+Legacy table:
+- smp_notifications may remain temporarily for auditable migration/rollback, but 1.2.0 creates no new local notifications and does not require this table.
+
+Release state:
+- Local static correction and syntax QA completed.
+- Hostinger staging fresh install, upgrade, rollback, real two-account workflows, browser/mobile accessibility, SMTP/notifications, scanner, and production-key validation remain mandatory before merge or live deployment.
