@@ -22,7 +22,7 @@ define('MKT_URL', plugin_dir_url(__FILE__));
 define('MKT_BASENAME', plugin_basename(__FILE__));
 
 $includes = [
-    'class-mkt-contracts.php','class-mkt-integrations.php','class-mkt-state-machines.php','class-mkt-db.php','class-mkt-policy.php','class-mkt-auth.php','class-mkt-rate-limiter.php','class-mkt-idempotency.php','class-mkt-audit.php','class-mkt-events.php','class-mkt-listings.php','class-mkt-commerce.php','class-mkt-moderation.php','class-mkt-governance.php','class-mkt-plan-completion.php','class-mkt-finalization.php','class-mkt-release-gates.php','class-mkt-privacy.php','class-mkt-maintenance.php','class-mkt-rest.php','class-mkt-routes.php','class-mkt-admin.php',
+    'class-mkt-contracts.php','class-mkt-integrations.php','class-mkt-state-machines.php','class-mkt-db.php','class-mkt-policy.php','class-mkt-auth.php','class-mkt-rate-limiter.php','class-mkt-idempotency.php','class-mkt-audit.php','class-mkt-events.php','class-mkt-listings.php','class-mkt-commerce.php','class-mkt-moderation.php','class-mkt-governance.php','class-mkt-plan-completion.php','class-mkt-finalization.php','class-mkt-release-gates.php','class-mkt-privacy.php','class-mkt-maintenance.php','class-mkt-rest-security.php','class-mkt-rest.php','class-mkt-routes.php','class-mkt-admin.php',
 ];
 foreach ($includes as $include) require_once MKT_DIR . 'includes/' . $include;
 
@@ -41,6 +41,7 @@ final class MKT_Plugin {
         add_action('plugins_loaded',['MKT_Plan_Completion','boot'],30);
         add_action('plugins_loaded',['MKT_Finalization','boot'],35);
         add_action('plugins_loaded',['MKT_Release_Gates','boot'],40);
+        add_action('plugins_loaded',['MKT_REST_Security','boot'],45);
         add_action('init',[$this,'init'],5);
         add_action('rest_api_init',['MKT_REST','register_routes']);
         add_action('sabri_platform_event',['MKT_Events','handle_external_event'],20,2);
