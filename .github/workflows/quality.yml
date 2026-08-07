@@ -15,13 +15,13 @@ jobs:
         php: ['8.1', '8.3']
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Reconstruct canonical source
         run: bash reconstruct-source.sh
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Static and contract QA
@@ -32,4 +32,4 @@ jobs:
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
           cmp "$RUNNER_TEMP/release-a/18-marketplace-2.0.0-RC1.zip" "$RUNNER_TEMP/release-b/18-marketplace-2.0.0-RC1.zip"
           unzip -t "$RUNNER_TEMP/release-a/18-marketplace-2.0.0-RC1.zip"
-          echo "b1776d6fd45248dc29d5fde814f41b06f41ac392338bc79f22931b4e9e0901c8  $RUNNER_TEMP/release-a/18-marketplace-2.0.0-RC1.zip" | sha256sum --check
+          echo "4e5fd6d2ea7fe989b176aabd3a778ce729b622954ea566ab14cf3e1037a5266d  $RUNNER_TEMP/release-a/18-marketplace-2.0.0-RC1.zip" | sha256sum --check

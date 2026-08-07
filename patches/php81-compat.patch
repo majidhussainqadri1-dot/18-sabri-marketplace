@@ -1,0 +1,73 @@
+--- a/18-marketplace/includes/class-mkt-auth.php
++++ b/18-marketplace/includes/class-mkt-auth.php
+@@ -2,7 +2,7 @@
+ defined('ABSPATH') || exit;
+ 
+ final class MKT_Auth {
+-    public static function require_login(): true|WP_Error {
++    public static function require_login(): bool|WP_Error {
+         return is_user_logged_in() ? true : new WP_Error('mkt_authentication_required', __('Please sign in to continue.', 'marketplace'), ['status' => 401]);
+     }
+ 
+@@ -10,7 +10,7 @@
+         return MKT_Integrations::identity_assertions($user_id ?? get_current_user_id());
+     }
+ 
+-    public static function can(string $capability, array $context = []): true|WP_Error {
++    public static function can(string $capability, array $context = []): bool|WP_Error {
+         $login = self::require_login();
+         if (is_wp_error($login)) {
+             return $login;
+--- a/18-marketplace/includes/class-mkt-events.php
++++ b/18-marketplace/includes/class-mkt-events.php
+@@ -176,7 +176,7 @@
+         });
+     }
+ 
+-    public static function consume_external(string $source, array $event, callable $handler): true|WP_Error {
++    public static function consume_external(string $source, array $event, callable $handler): bool|WP_Error {
+         global $wpdb;
+         $event_id = sanitize_text_field((string) ($event['event_id'] ?? ''));
+         $event_type = sanitize_text_field((string) ($event['event_type'] ?? ''));
+--- a/18-marketplace/includes/class-mkt-listings.php
++++ b/18-marketplace/includes/class-mkt-listings.php
+@@ -324,7 +324,7 @@
+     }
+ 
+ 
+-    public static function remove_media(string $public_id, string $media_public_id, int $user_id): true|WP_Error {
++    public static function remove_media(string $public_id, string $media_public_id, int $user_id): bool|WP_Error {
+         $auth = MKT_Auth::can('mkt_sell', ['action' => 'remove_listing_media']);
+         if (is_wp_error($auth)) return $auth;
+         $listing = self::get($public_id, true);
+@@ -344,7 +344,7 @@
+         return true;
+     }
+ 
+-    public static function save(string $public_id, int $user_id, bool $save = true): true|WP_Error {
++    public static function save(string $public_id, int $user_id, bool $save = true): bool|WP_Error {
+         $auth = MKT_Auth::can('mkt_buy', ['action' => 'save_listing']);
+         if (is_wp_error($auth)) return $auth;
+         $listing = self::get($public_id, false);
+--- a/18-marketplace/includes/class-mkt-rate-limiter.php
++++ b/18-marketplace/includes/class-mkt-rate-limiter.php
+@@ -14,7 +14,7 @@
+         'system' => [60, 3600],
+     ];
+ 
+-    public static function check(string $bucket, ?int $user_id = null): true|WP_Error {
++    public static function check(string $bucket, ?int $user_id = null): bool|WP_Error {
+         [$limit, $window] = self::LIMITS[$bucket] ?? [60, 60];
+         $identity = self::identity($user_id ?? get_current_user_id());
+         $slot = (int) floor(time() / $window);
+--- a/18-marketplace/includes/class-mkt-state-machines.php
++++ b/18-marketplace/includes/class-mkt-state-machines.php
+@@ -63,7 +63,7 @@
+         return self::MAP[sanitize_key($machine)][sanitize_key($from)] ?? [];
+     }
+ 
+-    public static function assert(string $machine, string $from, string $to): true|WP_Error {
++    public static function assert(string $machine, string $from, string $to): bool|WP_Error {
+         if (self::can($machine, $from, $to)) {
+             return true;
+         }

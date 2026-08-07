@@ -5,11 +5,11 @@
 
 ## Automated result
 
-**PASS — zero known failures in the packaged static/contract suite.**
+**PASS locally — GitHub matrix verification required for the current head.**
 
 The suite validates:
 
-- PHP syntax for all PHP files.
+- PHP syntax and runtime-compatible declarations for PHP 8.1 and PHP 8.3.
 - JavaScript syntax and CSS structural balance.
 - Listing, offer, deal, report and dispute state-machine laws.
 - Zero-commission and canonical-owner contracts.
@@ -23,6 +23,11 @@ The suite validates:
 - Outbox acknowledgement semantics.
 - Private route noindex/no-store, non-destructive uninstall and release identity.
 - Forbidden secret/private-key and dangerous-execution patterns.
+- Two independent release builds and exact SHA-256 parity.
+
+## Corrective CI finding and remedy
+
+The first PHP 8.1 matrix run identified return declarations using the standalone `true` type, which PHP 8.1 does not support. The audited compatibility patch changes those unions to `bool|WP_Error` without changing successful-return behavior. PHP 8.3 had already passed the full static/contract and deterministic-build path. Both matrix lanes must pass on the final head before automated QA is declared complete.
 
 ## Environment-independent limitations
 

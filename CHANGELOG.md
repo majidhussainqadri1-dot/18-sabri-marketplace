@@ -22,11 +22,13 @@
 - Added atomic optimistic-version transitions and listing-row locking during offer acceptance.
 - Added policy review for regulated products and false-cure/patient-data controls.
 - Added current listing status propagation into search, context cards and deals.
+- Replaced PHP 8.2-only standalone `true` return types with PHP 8.1-compatible `bool|WP_Error` unions after matrix CI detected the incompatibility.
 
 ### Compatibility
 - Legacy `smp_*` seller/product records are imported non-destructively.
 - Legacy conversation/message IDs are recorded for File 17 handoff; data is not silently deleted.
 - Old routes may be redirected during controlled staging cutover.
+- PHP 8.1 and PHP 8.3 are both explicit automated QA targets.
 
 ### Final corrective review additions
 - Added canonical replay protection to every state-changing REST endpoint.
