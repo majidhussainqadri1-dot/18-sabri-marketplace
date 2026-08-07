@@ -16,20 +16,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Reconstruct canonical source
-        run: bash reconstruct-source.sh
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
-      - name: Static and contract QA
+      - name: Direct-source supply-chain gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s 18-marketplace/marketplace.php
+          test -d 18-marketplace/includes
+          test -d 18-marketplace/tests
+          test ! -e reconstruct-source.sh
+          test ! -d bundles
+          test ! -d patches
+          if find . -type f -name '*.b64*' -print -quit | grep -q .; then
+            echo 'Encoded source bundle detected; canonical source must be directly reviewable.' >&2
+            exit 1
+          fi
+      - name: Static, contract and four-plan QA
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Deterministic release build
+        shell: bash
         run: |
+          set -euo pipefail
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-a"
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
-          cmp "$RUNNER_TEMP/release-a/18-marketplace-2.0.0-RC1.zip" "$RUNNER_TEMP/release-b/18-marketplace-2.0.0-RC1.zip"
-          unzip -t "$RUNNER_TEMP/release-a/18-marketplace-2.0.0-RC1.zip"
-          echo "4e5fd6d2ea7fe989b176aabd3a778ce729b622954ea566ab14cf3e1037a5266d  $RUNNER_TEMP/release-a/18-marketplace-2.0.0-RC1.zip" | sha256sum --check
+          A="$RUNNER_TEMP/release-a/18-marketplace-2.0.1-RC2.zip"
+          B="$RUNNER_TEMP/release-b/18-marketplace-2.0.1-RC2.zip"
+          cmp "$A" "$B"
+          unzip -t "$A"
+          HASH_A="$(sha256sum "$A" | awk '{print $1}')"
+          HASH_B="$(sha256sum "$B" | awk '{print $1}')"
+          test "$HASH_A" = "$HASH_B"
+          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.0.1-RC2.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.0.1-RC2.zip.sha256"
+          {
+            echo '### File 18 Marketplace 2.0.1 RC2'
+            echo
+            echo "SHA-256: \`$HASH_A\`"
+            echo
+            echo "PHP matrix member: ${{ matrix.php }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: matrix.php == '8.3'
+        with:
+          name: file18-marketplace-2.0.1-rc2
+          path: |
+            ${{ runner.temp }}/release-a/18-marketplace-2.0.1-RC2.zip
+            ${{ runner.temp }}/release-a/18-marketplace-2.0.1-RC2.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
