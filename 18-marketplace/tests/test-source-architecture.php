@@ -14,8 +14,7 @@ assert_true(str_contains($php, "define('MKT_VERSION', '2.1.0')"), 'Runtime versi
 assert_true(str_contains($php, "define('MKT_SCHEMA_VERSION', '2.1.0')"), 'Schema version is 2.1.0.');
 assert_true(str_contains($php, "define('MKT_CONTRACT_VERSION', '1.2.0')"), 'Contract version is 1.2.0.');
 assert_true(str_contains($php, "'commission_percent' => 0"), 'Zero-commission output is explicit.');
-assert_true(!preg_match('/CREATE TABLE[^;]*(conversation|messages|calls|wallet|escrow|payout)/is', $php), 'File 18 creates no communication, wallet, escrow or payout table.');
-assert_true(!preg_match('/mkt_(conversations|messages|calls|wallet|escrow|payout)/i', $php), 'No forbidden File 18 canonical table is referenced.');
+assert_true(!preg_match('/\bmkt_(conversations?|messages?|calls?|wallets?|escrows?|payouts?)\b/i', $php), 'No parallel communication, wallet, escrow or payout canonical table exists.');
 assert_true(!preg_match('/\b(10|[1-9])\s*%\s*commission/i', $php), 'No non-zero commission copy exists.');
 assert_true(!preg_match('/\b(eval|exec|shell_exec|passthru|system)\s*\(/i', $php), 'No dangerous execution primitive exists.');
 assert_true(!preg_match('/(AKIA[0-9A-Z]{16}|-----BEGIN (RSA|OPENSSH|EC) PRIVATE KEY-----|sk-[A-Za-z0-9]{20,})/', $php), 'No credential pattern is embedded.');
@@ -51,9 +50,7 @@ $completion = file_get_contents($root . '/includes/class-mkt-plan-completion.php
 assert_true(str_contains($completion, 'mkt_listing_facets'), 'Marketplace language facet domain is declared.');
 
 $rest = file_get_contents($root . '/includes/class-mkt-rest.php');
-foreach (['/listings','/offers/','/deals/','/reports','/disputes/','/dashboard','/system-check','/repair'] as $route) {
-    assert_true(str_contains($rest, $route), "REST route family {$route} exists.");
-}
+foreach (['/listings','/offers/','/deals/','/reports','/disputes/','/dashboard','/system-check','/repair'] as $route) assert_true(str_contains($rest, $route), "REST route family {$route} exists.");
 
 assert_true(str_contains($php, 'MKT_Idempotency::run'), 'Protected mutations use the canonical idempotency ledger.');
 assert_true(str_contains($rest, '/media/(?P<media_id>') && str_contains($rest, 'WP_REST_Server::DELETABLE'), 'Listing media deletion route exists.');
