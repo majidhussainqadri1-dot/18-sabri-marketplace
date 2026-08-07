@@ -4,6 +4,7 @@ $root = dirname(__DIR__);
 $commerce = file_get_contents($root . '/includes/class-mkt-commerce.php');
 $moderation = file_get_contents($root . '/includes/class-mkt-moderation.php');
 $events = file_get_contents($root . '/includes/class-mkt-events.php');
+$integration = file_get_contents($root . '/includes/class-mkt-integrations.php');
 $rest = file_get_contents($root . '/includes/class-mkt-rest.php');
 $idempotency = file_get_contents($root . '/includes/class-mkt-idempotency.php');
 $admin = file_get_contents($root . '/includes/class-mkt-admin.php');
@@ -25,6 +26,8 @@ assert_true(str_contains($moderation, "'non_delivery'") && str_contains($moderat
 assert_true(str_contains($moderation, '$listing_result = MKT_Listings::transition') && str_contains($moderation, 'if (is_wp_error($listing_result))'), 'Listing restriction failures propagate so the owner transaction can roll back the report state.');
 assert_true(str_contains($events, '$paused === false') && str_contains($events, 'mkt_seller_listing_pause_failed'), 'Seller-suspension reconciliation does not acknowledge an event when active listings fail to pause.');
 assert_true(str_contains($events, '$listing_exists') && str_contains($events, 'mkt_communication_report_write_failed'), 'File 17 report events validate their Marketplace target and remain retryable when report persistence fails.');
+assert_true(str_contains($integration, 'MKT_Auth::seller_eligibility($other_user_id)') && str_contains($integration, 'mkt_seller_contact_unavailable'), 'File 17 Marketplace handoff revalidates current seller eligibility.');
+assert_true(str_contains($integration, 'wp_parse_url(home_url') && str_contains($integration, 'mkt_communication_url_invalid'), 'File 17 conversation handoff is constrained to a same-origin destination.');
 assert_true(str_contains($admin, "current_user_can('mkt_moderate')") && str_contains($admin, "current_user_can('mkt_review_disputes')"), 'Moderation UI follows least privilege.');
 assert_true(str_contains($privacy, "'dispute' => \$wpdb->get_results") && str_contains($privacy, "MKT_DB::table('disputes')") && str_contains($privacy, "'group_id' => 'mkt-' . \$type"), 'Privacy export includes participant disputes through the generic bounded exporter.');
 assert_true(str_contains($privacy, 'private const EXPORT_BATCH = 100') && str_contains($privacy, 'private const ERASE_BATCH = 100'), 'Privacy export and erasure are bounded.');
