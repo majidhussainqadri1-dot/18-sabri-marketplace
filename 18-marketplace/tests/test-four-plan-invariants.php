@@ -1,0 +1,20 @@
+<?php
+require __DIR__ . '/bootstrap.php';
+$root = dirname(__DIR__);
+$auth = file_get_contents($root . '/includes/class-mkt-auth.php');
+$contracts = file_get_contents($root . '/includes/class-mkt-contracts.php');
+$events = file_get_contents($root . '/includes/class-mkt-events.php');
+$idem = file_get_contents($root . '/includes/class-mkt-idempotency.php');
+$listings = file_get_contents($root . '/includes/class-mkt-listings.php');
+$rest = file_get_contents($root . '/includes/class-mkt-rest.php');
+$css = file_get_contents($root . '/assets/css/marketplace.css');
+assert_true(str_contains($auth, "!$assertions['verified']"), 'Protected Marketplace actions require verified identity.');
+assert_true(str_contains($auth, "['blocked','high','critical']"), 'Protected actions fail closed on high-risk states.');
+assert_true(str_contains($contracts, "'access_tier' => 'single_free'") && str_contains($contracts, "'donation_advantage' => false") && str_contains($contracts, "'paid_ranking' => false"), 'Single-free-tier and non-privilege business laws are machine-readable.');
+assert_true(!str_contains($listings, "ORDER BY (l.featured_label<>''") && str_contains($listings, 'ORDER BY l.published_at DESC,l.id DESC'), 'Default discovery ranking cannot privilege a featured/donor/paid label.');
+assert_true(str_contains($idem, 'mkt_request_in_progress') && str_contains($idem, "AND status=%s"), 'Retry claims are conditional and concurrency-safe.');
+assert_true(str_contains($events, 'mkt_event_payload_conflict') && str_contains($events, "status='failed'"), 'External inbox rejects payload conflicts and can reclaim failed events.');
+assert_true(str_contains($rest, "'access_tier' => 'single_free'") && str_contains($rest, "'paid_ranking' => false"), 'Public status exposes current constitutional business state.');
+assert_true(str_contains($css, 'var(--sabri-color-primary,#147a43)'), 'Marketplace consumes File 25 primary design token with a green fallback.');
+assert_true(!is_dir(dirname($root) . '/bundles') && !file_exists(dirname($root) . '/reconstruct-source.sh'), 'Canonical source is reviewable directly; no base64 reconstruction is required.');
+fwrite(STDOUT, "Four-plan invariant suite complete.\n");

@@ -1,17 +1,12 @@
-# File 18 — Release Status
+# File 18 Status
 
-**Module:** Sabri Marketplace  
-**Candidate:** 2.0.0-RC1  
-**Decision:** CODE COMPLETE / DETERMINISTIC PACKAGE COMPLETE / AUTOMATED QA GREEN / STAGING PENDING
-
-| Completion status | State |
-|---|---|
-| Specified | Complete |
-| Coded | Complete candidate |
-| Packaged | Complete candidate |
-| Automated-QA Green | Complete |
-| Staging-Accepted | Pending |
-| Live-Deployed | Pending |
-| Operational | Pending |
-
-The candidate must not be described as production-ready or live until fresh installation, supported upgrade, real integrations, two-account buyer/seller journeys, privacy workflows, accessibility, backup/restore/rollback and Founder acceptance pass on Hostinger staging.
+- Runtime candidate: **2.0.1**
+- Schema: **2.0.0**
+- Contract: **1.1.0**
+- Specified: complete against the four governing plans used in the four-round audit.
+- Coded: corrective candidate complete; direct source reviewable.
+- Packaged: deterministic RC2 build required from final exact head.
+- Automated QA: required on PHP 8.1 and 8.3 at final exact head.
+- Staging-Accepted: pending Hostinger acceptance.
+- Live-Deployed: pending Founder approval after staging.
+- Operational: pending production monitoring/support/backup evidence.

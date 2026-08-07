@@ -163,6 +163,13 @@ final class MKT_Integrations {
         ];
     }
 
+    public static function shell_owns_context_navigation(): bool {
+        $present = defined('SABRI_UNIFIED_SHELL_VERSION')
+            || class_exists('Sabri\\UnifiedShell\\Layout')
+            || function_exists('sabri_unified_shell_register_destination');
+        return (bool) apply_filters('mkt_shell_owns_context_navigation', $present, 'marketplace');
+    }
+
     public static function shell_navigation(array $destinations): array {
         $destinations['marketplace'] = [
             'label' => __('Marketplace', 'marketplace'),

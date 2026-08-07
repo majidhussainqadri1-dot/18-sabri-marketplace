@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.1 — Four-plan corrective candidate
+- Enforced approved + verified high-trust identity for protected Marketplace actions and fail-closed high-risk states.
+- Removed default featured-label ranking privilege; kept labels presentation-only.
+- Declared single-free-tier, donation-non-privilege and no-paid-ranking invariants in contracts/status.
+- Made idempotency retry claims atomic and recoverable after stale processing expiry.
+- Made external event inbox detect payload conflicts and safely retry failed events.
+- Consumed File 25 primary visual token with green fallback and avoided Back/Home duplication when File 20 owns context navigation.
+- Materialized direct canonical source and removed base64 reconstruction artifacts.
+- Added four-plan invariant tests and four-round audit record.
+
 ## 2.0.0 — Final-plan architectural correction
 
 ### Added

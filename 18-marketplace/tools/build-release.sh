@@ -3,8 +3,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$(dirname "$ROOT")"
 OUT="${1:-$PROJECT/release}"
-VERSION="2.0.0"
-PACKAGE="18-marketplace-${VERSION}-RC1.zip"
+VERSION="2.0.1"
+PACKAGE="18-marketplace-${VERSION}-RC2.zip"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1786089600}"
 export SOURCE_DATE_EPOCH
 mkdir -p "$OUT"

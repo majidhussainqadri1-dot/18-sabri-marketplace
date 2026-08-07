@@ -42,6 +42,24 @@ final class MKT_Routes {
         return MKT_DIR . 'templates/' . $map[$route];
     }
 
+    public static function safe_back_url(): string {
+        $fallback = home_url('/marketplace/');
+        $referer = wp_get_referer();
+        if (!$referer) {
+            return $fallback;
+        }
+        $validated = wp_validate_redirect($referer, '');
+        if ($validated === '') {
+            return $fallback;
+        }
+        $home = wp_parse_url(home_url('/'));
+        $target = wp_parse_url($validated);
+        if (!is_array($home) || !is_array($target) || empty($target['host']) || strcasecmp((string) ($home['host'] ?? ''), (string) $target['host']) !== 0) {
+            return $fallback;
+        }
+        return $validated;
+    }
+
     public static function register_assets(): void {
         wp_register_style('mkt-marketplace', MKT_URL . 'assets/css/marketplace.css', [], MKT_VERSION);
         wp_register_script('mkt-marketplace', MKT_URL . 'assets/js/marketplace.js', [], MKT_VERSION, true);

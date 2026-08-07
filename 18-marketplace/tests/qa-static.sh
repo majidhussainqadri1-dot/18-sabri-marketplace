@@ -31,8 +31,10 @@ echo '[9/10] Forbidden artifact scan'
 ! grep -RInE --include='*.php' 'CREATE TABLE.*(conversation|messages|calls|wallet|escrow|payout)' "$ROOT/includes"
 ! grep -RInE --include='*.php' '\b(eval|exec|shell_exec|passthru|system)[[:space:]]*\(' "$ROOT"
 
-echo '[10/10] Release identity'
-grep -q 'Version: 2.0.0' "$ROOT/marketplace.php"
-grep -q 'Stable tag: 2.0.0' "$ROOT/readme.txt"
+echo '[10/11] Release identity'
+grep -q 'Version: 2.0.1' "$ROOT/marketplace.php"
+grep -q 'Stable tag: 2.0.1' "$ROOT/readme.txt"
 grep -q '0% platform commission' "$ROOT/readme.txt"
+echo '[11/11] Four-plan governing invariants'
+php "$ROOT/tests/test-four-plan-invariants.php"
 echo 'ALL STATIC AND CONTRACT TESTS PASSED'

@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Marketplace
  * Plugin URI: https://sabrihomeopathy.com/
  * Description: Canonical zero-commission marketplace for the Sabri Social Homeopathy Platform.
- * Version: 2.0.0
+ * Version: 2.0.1
  * Author: Dr. Allamah Majid Hussain Sabri
  * Text Domain: marketplace
  * Domain Path: /languages
@@ -13,9 +13,9 @@
 
 defined('ABSPATH') || exit;
 
-define('MKT_VERSION', '2.0.0');
+define('MKT_VERSION', '2.0.1');
 define('MKT_SCHEMA_VERSION', '2.0.0');
-define('MKT_CONTRACT_VERSION', '1.0.0');
+define('MKT_CONTRACT_VERSION', '1.1.0');
 define('MKT_FILE', __FILE__);
 define('MKT_DIR', plugin_dir_path(__FILE__));
 define('MKT_URL', plugin_dir_url(__FILE__));

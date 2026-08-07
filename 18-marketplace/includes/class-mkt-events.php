@@ -189,7 +189,29 @@ final class MKT_Events {
             sanitize_key($source), $event_id, $event_type, $payload_hash, 'received', MKT_DB::now()
         ));
         if (!$inserted) {
-            return true;
+            $existing = $wpdb->get_row($wpdb->prepare(
+                'SELECT * FROM ' . MKT_DB::table('inbox') . ' WHERE source=%s AND event_id=%s',
+                sanitize_key($source), $event_id
+            ), ARRAY_A);
+            if (!$existing) {
+                return new WP_Error('mkt_event_inbox_unavailable', __('The event inbox could not be read safely.', 'marketplace'));
+            }
+            if (!hash_equals((string) $existing['payload_hash'], $payload_hash)) {
+                return new WP_Error('mkt_event_payload_conflict', __('The event ID was reused with a different payload.', 'marketplace'));
+            }
+            if ((string) $existing['status'] === 'processed') {
+                return true;
+            }
+            if ((string) $existing['status'] !== 'failed') {
+                return new WP_Error('mkt_event_in_progress', __('The event is already being processed.', 'marketplace'));
+            }
+            $reclaimed = $wpdb->query($wpdb->prepare(
+                "UPDATE " . MKT_DB::table('inbox') . " SET status='received',received_at=%s WHERE id=%d AND status='failed'",
+                MKT_DB::now(), (int) $existing['id']
+            ));
+            if ($reclaimed !== 1) {
+                return new WP_Error('mkt_event_in_progress', __('The failed event is already being retried.', 'marketplace'));
+            }
         }
         try {
             $result = $handler($event);

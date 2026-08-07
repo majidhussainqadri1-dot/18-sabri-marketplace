@@ -74,6 +74,9 @@ final class MKT_Contracts {
             'schema_version' => MKT_SCHEMA_VERSION,
             'contract_version' => MKT_CONTRACT_VERSION,
             'commission_percent' => self::zero_commission(),
+            'access_tier' => 'single_free',
+            'donation_advantage' => false,
+            'paid_ranking' => false,
             'canonical_owners' => [
                 'identity' => 'File 00',
                 'communication' => 'File 17',

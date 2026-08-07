@@ -20,8 +20,11 @@ final class MKT_Auth {
         if (!$assertions['available']) {
             return new WP_Error('mkt_identity_provider_unavailable', __('Identity verification is temporarily unavailable.', 'marketplace'), ['status' => 503]);
         }
-        if (!$assertions['approved'] || $assertions['suspended']) {
-            return new WP_Error('mkt_account_not_eligible', __('Your account is not currently eligible for this action.', 'marketplace'), ['status' => 403]);
+        if (!$assertions['approved'] || !$assertions['verified'] || $assertions['suspended']) {
+            return new WP_Error('mkt_account_not_eligible', __('An approved and verified account is required for this action.', 'marketplace'), ['status' => 403]);
+        }
+        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)) {
+            return new WP_Error('mkt_account_risk_hold', __('This action is unavailable while the account is under a marketplace risk hold.', 'marketplace'), ['status' => 403]);
         }
         if (!empty($assertions['is_minor']) && empty($assertions['guardian_verified'])) {
             return new WP_Error('mkt_guardian_required', __('Verified guardian consent is required for this action.', 'marketplace'), ['status' => 403]);
@@ -50,6 +53,9 @@ final class MKT_Auth {
         }
         if (!$assertions['approved']) {
             $reasons[] = 'account_unapproved';
+        }
+        if (!$assertions['verified']) {
+            $reasons[] = 'account_unverified';
         }
         if ($assertions['suspended']) {
             $reasons[] = 'account_suspended';

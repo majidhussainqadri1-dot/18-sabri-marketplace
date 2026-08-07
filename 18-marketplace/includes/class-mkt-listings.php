@@ -453,7 +453,7 @@ final class MKT_Listings {
         if ($where) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
-        $sql .= ' ORDER BY (l.featured_label<>\'\') DESC,l.published_at DESC,l.id DESC LIMIT %d';
+        $sql .= ' ORDER BY l.published_at DESC,l.id DESC LIMIT %d';
         $params[] = $limit + 1;
         $rows = $wpdb->get_results($wpdb->prepare($sql, $params), ARRAY_A);
         $has_more = count($rows) > $limit;

@@ -26,10 +26,19 @@ final class MKT_Idempotency {
                 $cached = json_decode((string) $row['response_json'], true);
                 return $cached ?? true;
             }
-            if ((string) $row['status'] === 'processing') {
+            $claimable = (string) $row['status'] === 'failed'
+                || ((string) $row['status'] === 'processing' && strtotime((string) $row['expires_at']) <= time());
+            if (!$claimable) {
                 return new WP_Error('mkt_request_in_progress', __('An identical request is already in progress.', 'marketplace'), ['status' => 409, 'retry_after' => 2]);
             }
-            $wpdb->update($table, ['status' => 'processing', 'response_code' => 0, 'response_json' => null, 'created_at' => MKT_DB::now(), 'expires_at' => gmdate('Y-m-d H:i:s', time() + DAY_IN_SECONDS)], ['id' => (int) $row['id']]);
+            $previous_status = (string) $row['status'];
+            $claimed = $wpdb->query($wpdb->prepare(
+                "UPDATE {$table} SET status='processing',response_code=0,response_json=NULL,created_at=%s,expires_at=%s WHERE id=%d AND status=%s",
+                MKT_DB::now(), gmdate('Y-m-d H:i:s', time() + DAY_IN_SECONDS), (int) $row['id'], $previous_status
+            ));
+            if ($claimed !== 1) {
+                return new WP_Error('mkt_request_in_progress', __('An identical request is already being retried.', 'marketplace'), ['status' => 409, 'retry_after' => 2]);
+            }
         }
 
         try {
