@@ -3,7 +3,7 @@
  * Plugin Name: Sabri Marketplace
  * Plugin URI: https://sabrihomeopathy.com/
  * Description: Canonical zero-commission marketplace for the Sabri Social Homeopathy Platform.
- * Version: 2.0.1
+ * Version: 2.1.0
  * Author: Dr. Allamah Majid Hussain Sabri
  * Text Domain: marketplace
  * Domain Path: /languages
@@ -13,9 +13,9 @@
 
 defined('ABSPATH') || exit;
 
-define('MKT_VERSION', '2.0.1');
-define('MKT_SCHEMA_VERSION', '2.0.0');
-define('MKT_CONTRACT_VERSION', '1.1.0');
+define('MKT_VERSION', '2.1.0');
+define('MKT_SCHEMA_VERSION', '2.1.0');
+define('MKT_CONTRACT_VERSION', '1.2.0');
 define('MKT_FILE', __FILE__);
 define('MKT_DIR', plugin_dir_path(__FILE__));
 define('MKT_URL', plugin_dir_url(__FILE__));
@@ -35,6 +35,7 @@ $includes = [
     'class-mkt-listings.php',
     'class-mkt-commerce.php',
     'class-mkt-moderation.php',
+    'class-mkt-governance.php',
     'class-mkt-privacy.php',
     'class-mkt-maintenance.php',
     'class-mkt-rest.php',
@@ -46,6 +47,7 @@ foreach ($includes as $include) {
 }
 
 register_activation_hook(MKT_FILE, ['MKT_DB', 'activate']);
+register_activation_hook(MKT_FILE, ['MKT_Governance', 'activate']);
 register_deactivation_hook(MKT_FILE, ['MKT_DB', 'deactivate']);
 
 final class MKT_Plugin {
@@ -58,6 +60,7 @@ final class MKT_Plugin {
     private function __construct() {
         add_action('plugins_loaded', [$this, 'load_textdomain']);
         add_action('plugins_loaded', ['MKT_Integrations', 'boot'], 20);
+        add_action('plugins_loaded', ['MKT_Governance', 'boot'], 25);
         add_action('init', [$this, 'init'], 5);
         add_action('rest_api_init', ['MKT_REST', 'register_routes']);
         add_action('sabri_platform_event', ['MKT_Events', 'handle_external_event'], 20, 2);
