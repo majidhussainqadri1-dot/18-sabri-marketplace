@@ -12,6 +12,7 @@ $idempotency = file_get_contents($root . '/includes/class-mkt-idempotency.php');
 $admin = file_get_contents($root . '/includes/class-mkt-admin.php');
 $privacy = file_get_contents($root . '/includes/class-mkt-privacy.php');
 $audit = file_get_contents($root . '/includes/class-mkt-audit.php');
+$css = file_get_contents($root . '/assets/css/marketplace.css');
 $js = file_get_contents($root . '/assets/js/marketplace.js');
 $db = file_get_contents($root . '/includes/class-mkt-db.php');
 
@@ -37,5 +38,6 @@ assert_true(str_contains($privacy, "'dispute' => \$wpdb->get_results") && str_co
 assert_true(str_contains($privacy, 'private const EXPORT_BATCH = 100') && str_contains($privacy, 'private const ERASE_BATCH = 100'), 'Privacy export and erasure are bounded.');
 assert_true(str_contains($audit, 'GET_LOCK') && str_contains($audit, 'verify_chain'), 'Audit chain has concurrency control and verification.');
 assert_true(str_contains($audit, 'if (!$inserted)') && str_contains($audit, 'audit evidence could not be persisted'), 'Required audit evidence cannot fail silently.');
+assert_true(!str_contains($css, '.mkt-button-small{min-height:36px') && str_contains($css, '.mkt-button-small{min-height:44px') && str_contains($css, '.mkt-tabs button{min-height:44px'), 'Interactive Marketplace controls preserve the central 44px minimum touch target.');
 assert_true(!preg_match('/\bmkt_(conversations?|messages?|calls?|wallets?|escrows?|payouts?)\b/i', $db), 'No parallel communication or money canonical table exists.');
 fwrite(STDOUT, "Adversarial invariant suite complete.\n");
