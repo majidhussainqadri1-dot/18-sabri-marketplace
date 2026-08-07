@@ -32,6 +32,9 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No materialization changes detected.'
+            exit 0
+          fi
           git commit -m 'Materialize canonical File 18 source tree for direct review'
           git push origin HEAD:feat/file-18-marketplace-plan-complete-2.0.0
