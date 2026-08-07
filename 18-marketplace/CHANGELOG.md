@@ -9,6 +9,7 @@
 - Consumed File 25 primary visual token with green fallback and avoided Back/Home duplication when File 20 owns context navigation.
 - Materialized direct canonical source and removed base64 reconstruction artifacts.
 - Added four-plan invariant tests and four-round audit record.
+- Revalidated dispute-reviewer deal access against current File 00 assertions; made upgrade locking atomic; bounded legacy migration batches; disabled writable promotions; revalidated policy/settings writes.
 
 ## 2.0.0 — Final-plan architectural correction
 

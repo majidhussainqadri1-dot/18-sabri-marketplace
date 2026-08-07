@@ -17,9 +17,9 @@ Defects found and corrected: protected actions accepted approved-but-unverified 
 
 Defects found and corrected: failed idempotent operations could be reclaimed non-atomically; expired `processing` reservations had no safe takeover; external inbox treated every duplicate as success, so failed events could be lost permanently and reused event IDs with altered payloads were not rejected.
 
-## Round 3 — integration, privacy, discovery, degraded behavior
+## Round 3 — integration, migration, authorization and degraded behavior
 
-Fresh review after fixes confirmed canonical owners remain File 00 identity, File 17 communication, File 19 notifications, File 20 shell, File 24 assurance, File 25 visual and File 26 search. Runtime status now exposes the current single-free-tier/non-privilege/no-paid-ranking constitution. No new unresolved code defect was found in this round.
+Fresh review after the first two corrections found further defects and corrected them: dispute-reviewer deal access relied on a WordPress capability without revalidating current File 00 verification/risk/suspension state; the schema/runtime upgrader used a non-atomic transient lock and did not promote the runtime option when schema version was unchanged; legacy seller/product/communication migrations loaded unbounded record sets; the dormant promotions setting remained writable despite the no-paid/no-donor-influence constitution; and policy/settings writes needed current high-trust authorization. These paths are now fail-closed or break-glass-scoped as appropriate, migration is keyset-batched, and the runtime/status contracts expose the current business constitution.
 
 ## Round 4 — supply chain, source review, packaging, release truth
 

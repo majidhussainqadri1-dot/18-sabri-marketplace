@@ -294,7 +294,11 @@ final class MKT_Commerce {
             return new WP_Error('mkt_deal_not_found', __('Deal not found.', 'marketplace'), ['status' => 404]);
         }
         $participant = MKT_Auth::deal_participant($deal, $actor_id);
-        $reviewer = current_user_can('mkt_review_disputes');
+        $reviewer = false;
+        if (current_user_can('mkt_review_disputes')) {
+            $reviewer_auth = MKT_Auth::can('mkt_review_disputes', ['action' => 'review_deal', 'deal_public_id' => $public_id]);
+            $reviewer = !is_wp_error($reviewer_auth);
+        }
         if (!$participant && !$reviewer) {
             return new WP_Error('mkt_deal_forbidden', __('You cannot update this deal.', 'marketplace'), ['status' => 403]);
         }
@@ -431,8 +435,14 @@ final class MKT_Commerce {
     public static function get_deal(string $public_id, int $user_id): array|WP_Error {
         global $wpdb;
         $deal = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE public_id=%s', $public_id), ARRAY_A);
-        if (!$deal || (!MKT_Auth::deal_participant($deal, $user_id) && !current_user_can('mkt_review_disputes'))) {
+        if (!$deal) {
             return new WP_Error('mkt_deal_not_found', __('Deal not found.', 'marketplace'), ['status' => 404]);
+        }
+        if (!MKT_Auth::deal_participant($deal, $user_id)) {
+            $reviewer_auth = MKT_Auth::can('mkt_review_disputes', ['action' => 'read_deal_for_dispute', 'deal_public_id' => $public_id]);
+            if (is_wp_error($reviewer_auth)) {
+                return new WP_Error('mkt_deal_not_found', __('Deal not found.', 'marketplace'), ['status' => 404]);
+            }
         }
         return self::deal_dto($deal);
     }

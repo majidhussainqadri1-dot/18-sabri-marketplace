@@ -38,22 +38,36 @@ final class MKT_DB {
     }
 
     public static function maybe_upgrade(): void {
-        if ((string) get_option('mkt_schema_version', '') === MKT_SCHEMA_VERSION) {
+        $schema_current = (string) get_option('mkt_schema_version', '') === MKT_SCHEMA_VERSION;
+        $runtime_current = (string) get_option('mkt_plugin_version', '') === MKT_VERSION;
+        if ($schema_current && $runtime_current) {
             return;
         }
-        $lock = 'mkt_upgrade_lock';
-        if (get_transient($lock)) {
+        if (!self::acquire_upgrade_lock()) {
             return;
         }
-        set_transient($lock, wp_generate_uuid4(), 5 * MINUTE_IN_SECONDS);
         try {
-            self::install_schema();
-            self::seed_defaults();
-            self::migrate_legacy_foundation();
+            if (!$schema_current) {
+                self::install_schema();
+                self::seed_defaults();
+                self::migrate_legacy_foundation();
+            }
             update_option('mkt_plugin_version', MKT_VERSION, false);
         } finally {
-            delete_transient($lock);
+            self::release_upgrade_lock();
         }
+    }
+
+    private static function acquire_upgrade_lock(): bool {
+        global $wpdb;
+        $name = substr($wpdb->prefix . 'mkt_file18_upgrade', 0, 64);
+        return (int) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s,0)', $name)) === 1;
+    }
+
+    private static function release_upgrade_lock(): void {
+        global $wpdb;
+        $name = substr($wpdb->prefix . 'mkt_file18_upgrade', 0, 64);
+        $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $name));
     }
 
     public static function install_schema(): void {
@@ -466,8 +480,11 @@ final class MKT_DB {
 
         $report = ['sellers' => 0, 'listings' => 0, 'quarantined' => 0, 'communication_handoffs' => 0];
         if ($has_sellers) {
-            $rows = $wpdb->get_results("SELECT * FROM {$legacy_sellers} ORDER BY id ASC", ARRAY_A);
-            foreach ($rows as $row) {
+            $last_seller_id = 0;
+            do {
+                $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$legacy_sellers} WHERE id>%d ORDER BY id ASC LIMIT 200", $last_seller_id), ARRAY_A);
+                foreach ($rows as $row) {
+                    $last_seller_id = max($last_seller_id, (int) $row['id']);
                 $user_id = (int) ($row['user_id'] ?? 0);
                 if ($user_id <= 0) {
                     $report['quarantined']++;
@@ -492,12 +509,16 @@ final class MKT_DB {
                     'created_at' => self::now(),
                     'updated_at' => self::now(),
                 ]);
-                $report['sellers']++;
-            }
+                    $report['sellers']++;
+                }
+            } while (count($rows) === 200);
         }
         if ($has_products && $has_sellers) {
-            $rows = $wpdb->get_results("SELECT p.*,s.user_id AS legacy_user_id FROM {$legacy_products} p LEFT JOIN {$legacy_sellers} s ON s.id=p.seller_id ORDER BY p.id ASC", ARRAY_A);
-            foreach ($rows as $row) {
+            $last_product_id = 0;
+            do {
+                $rows = $wpdb->get_results($wpdb->prepare("SELECT p.*,s.user_id AS legacy_user_id FROM {$legacy_products} p LEFT JOIN {$legacy_sellers} s ON s.id=p.seller_id WHERE p.id>%d ORDER BY p.id ASC LIMIT 200", $last_product_id), ARRAY_A);
+                foreach ($rows as $row) {
+                    $last_product_id = max($last_product_id, (int) $row['id']);
                 $user_id = (int) ($row['legacy_user_id'] ?? 0);
                 $seller_id = (int) $wpdb->get_var($wpdb->prepare('SELECT id FROM ' . self::table('sellers') . ' WHERE user_id=%d', $user_id));
                 if ($seller_id <= 0) {
@@ -535,8 +556,9 @@ final class MKT_DB {
                     'created_at' => self::now(),
                     'updated_at' => self::now(),
                 ]);
-                $report['listings']++;
-            }
+                    $report['listings']++;
+                }
+            } while (count($rows) === 200);
         } elseif ($has_products) {
             $report['quarantined'] += (int) $wpdb->get_var("SELECT COUNT(*) FROM {$legacy_products}");
         }
@@ -547,15 +569,19 @@ final class MKT_DB {
             if ((string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table))) !== $table) {
                 continue;
             }
-            $ids = $wpdb->get_col("SELECT id FROM {$table} ORDER BY id ASC");
-            foreach ($ids as $legacy_id) {
-                $payload_hash = hash('sha256', $type . ':' . (int) $legacy_id . ':' . MKT_SCHEMA_VERSION);
-                $wpdb->query($wpdb->prepare(
-                    'INSERT IGNORE INTO ' . self::table('migration_handoffs') . ' (legacy_type,legacy_id,target_owner,target_reference,payload_hash,status,attempts,last_error,created_at,updated_at) VALUES (%s,%d,%s,%s,%s,%s,0,%s,%s,%s)',
-                    $type, (int) $legacy_id, 'file-17-communication', '', $payload_hash, 'pending', '', self::now(), self::now()
-                ));
-                $report['communication_handoffs']++;
-            }
+            $last_handoff_id = 0;
+            do {
+                $ids = $wpdb->get_col($wpdb->prepare("SELECT id FROM {$table} WHERE id>%d ORDER BY id ASC LIMIT 500", $last_handoff_id));
+                foreach ($ids as $legacy_id) {
+                    $last_handoff_id = max($last_handoff_id, (int) $legacy_id);
+                    $payload_hash = hash('sha256', $type . ':' . (int) $legacy_id . ':' . MKT_SCHEMA_VERSION);
+                    $wpdb->query($wpdb->prepare(
+                        'INSERT IGNORE INTO ' . self::table('migration_handoffs') . ' (legacy_type,legacy_id,target_owner,target_reference,payload_hash,status,attempts,last_error,created_at,updated_at) VALUES (%s,%d,%s,%s,%s,%s,0,%s,%s,%s)',
+                        $type, (int) $legacy_id, 'file-17-communication', '', $payload_hash, 'pending', '', self::now(), self::now()
+                    ));
+                    $report['communication_handoffs']++;
+                }
+            } while (count($ids) === 500);
         }
 
         update_option('mkt_legacy_migration_report', $report, false);

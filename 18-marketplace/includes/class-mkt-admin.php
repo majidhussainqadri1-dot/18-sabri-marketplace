@@ -19,14 +19,15 @@ final class MKT_Admin {
 
     public static function sanitize_settings($input): array {
         $current = MKT_DB::settings();
-        if (!current_user_can('manage_options')) return $current;
+        $auth = MKT_Auth::can('manage_options', ['action' => 'update_marketplace_settings']);
+        if (is_wp_error($auth)) return $current;
         $input = is_array($input) ? $input : [];
         return [
             'safe_mode' => !empty($input['safe_mode']) ? 1 : 0,
             'selling_enabled' => !empty($input['selling_enabled']) ? 1 : 0,
             'offers_enabled' => !empty($input['offers_enabled']) ? 1 : 0,
             'deal_transitions_enabled' => !empty($input['deal_transitions_enabled']) ? 1 : 0,
-            'promotions_enabled' => !empty($input['promotions_enabled']) ? 1 : 0,
+            'promotions_enabled' => 0, // paid/donor ranking influence is constitutionally disabled
             'listing_expiry_days' => min(365, max(1, (int) ($input['listing_expiry_days'] ?? $current['listing_expiry_days']))),
             'max_media_refs' => min(20, max(0, (int) ($input['max_media_refs'] ?? $current['max_media_refs']))),
             'default_currency' => MKT_DB::currency((string) ($input['default_currency'] ?? 'PKR')),
@@ -134,7 +135,8 @@ final class MKT_Admin {
     }
 
     public static function handle_policy_save(): void {
-        if (!current_user_can('mkt_manage_policies')) wp_die(esc_html__('Access denied.', 'marketplace'));
+        $auth = MKT_Auth::can('mkt_manage_policies', ['action' => 'save_marketplace_policy']);
+        if (is_wp_error($auth)) wp_die(esc_html__('Access denied.', 'marketplace'));
         check_admin_referer('mkt_policy_save');
         $type = sanitize_key(wp_unslash((string) ($_POST['policy_type'] ?? 'category')));
         $key = sanitize_key(wp_unslash((string) ($_POST['policy_key'] ?? '')));
@@ -180,7 +182,7 @@ final class MKT_Admin {
         <h2><?php esc_html_e('Operational controls', 'marketplace'); ?></h2>
         <form method="post" action="options.php"><?php settings_fields('mkt_settings_group'); ?>
         <table class="form-table"><tbody>
-        <?php foreach (['safe_mode','selling_enabled','offers_enabled','deal_transitions_enabled','promotions_enabled'] as $key): ?><tr><th><?php echo esc_html(ucwords(str_replace('_',' ',$key))); ?></th><td><label><input type="checkbox" name="mkt_settings[<?php echo esc_attr($key); ?>]" value="1" <?php checked(!empty($settings[$key])); ?>> <?php esc_html_e('Enabled', 'marketplace'); ?></label></td></tr><?php endforeach; ?>
+        <?php foreach (['safe_mode','selling_enabled','offers_enabled','deal_transitions_enabled'] as $key): ?><tr><th><?php echo esc_html(ucwords(str_replace('_',' ',$key))); ?></th><td><label><input type="checkbox" name="mkt_settings[<?php echo esc_attr($key); ?>]" value="1" <?php checked(!empty($settings[$key])); ?>> <?php esc_html_e('Enabled', 'marketplace'); ?></label></td></tr><?php endforeach; ?>
         <tr><th><?php esc_html_e('Listing expiry days', 'marketplace'); ?></th><td><input type="number" min="1" max="365" name="mkt_settings[listing_expiry_days]" value="<?php echo esc_attr((string) $settings['listing_expiry_days']); ?>"></td></tr>
         <tr><th><?php esc_html_e('Maximum media references', 'marketplace'); ?></th><td><input type="number" min="0" max="20" name="mkt_settings[max_media_refs]" value="<?php echo esc_attr((string) $settings['max_media_refs']); ?>"></td></tr>
         <tr><th><?php esc_html_e('Default currency', 'marketplace'); ?></th><td><input type="text" maxlength="3" name="mkt_settings[default_currency]" value="<?php echo esc_attr((string) $settings['default_currency']); ?>"></td></tr>
