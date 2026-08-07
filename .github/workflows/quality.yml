@@ -44,16 +44,16 @@ jobs:
           set -euo pipefail
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-a"
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
-          A="$RUNNER_TEMP/release-a/18-marketplace-2.0.1-RC2.zip"
-          B="$RUNNER_TEMP/release-b/18-marketplace-2.0.1-RC2.zip"
+          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC3.zip"
+          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC3.zip"
           cmp "$A" "$B"
           unzip -t "$A"
           HASH_A="$(sha256sum "$A" | awk '{print $1}')"
           HASH_B="$(sha256sum "$B" | awk '{print $1}')"
           test "$HASH_A" = "$HASH_B"
-          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.0.1-RC2.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.0.1-RC2.zip.sha256"
+          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC3.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC3.zip.sha256"
           {
-            echo '### File 18 Marketplace 2.0.1 RC2'
+            echo '### File 18 Marketplace 2.1.0 RC3'
             echo
             echo "SHA-256: \`$HASH_A\`"
             echo
@@ -62,9 +62,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.php == '8.3'
         with:
-          name: file18-marketplace-2.0.1-rc2
+          name: file18-marketplace-2.1.0-rc3
           path: |
-            ${{ runner.temp }}/release-a/18-marketplace-2.0.1-RC2.zip
-            ${{ runner.temp }}/release-a/18-marketplace-2.0.1-RC2.zip.sha256
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC3.zip
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC3.zip.sha256
           if-no-files-found: error
           retention-days: 14
