@@ -63,7 +63,7 @@ A round is marked **DEFECT** only when the extended audit found a concrete imple
 | 16 | Structured regulated-product evidence (manufacturer/license/batch/expiry/claims/source) | **CLEAN** | Evidence domain and publication gate remained present and fail-closed. |
 | 17 | Evidence reviewer separation / seller self-review prohibition | **CLEAN** | Self-review guard remained enforced; rejected evidence pauses active listing. |
 | 18 | Recall/takedown lifecycle and public safety notice | **CLEAN** | Active recall keeps safety notice reachable while commerce/contact are disabled. |
-| 19 | Recall cache/search/SEO safety (`noindex`, `noarchive`, private/no-store` where required) | **CLEAN** | Existing release-gate response controls remained intact. |
+| 19 | Recall cache/search/SEO safety (`noindex`, `noarchive`, private/no-store where required) | **CLEAN** | Existing release-gate response controls remained intact. |
 | 20 | Seller Studio usefulness without ranking coercion | **CLEAN** | Studio remains operational/analytics UI only and explicitly non-paid-ranking. |
 | 21 | Listing facets: availability, seller state, rights, language and listing type | **CLEAN** | Governed local facets remained present; no canonical-owner takeover. |
 | 22 | Product/service/digital type plus service scheduling | **CLEAN** | Type rules and service scheduling remained present. |
