@@ -72,31 +72,41 @@ Corrections:
 Fresh final audit after the first three correction rounds found and corrected:
 
 - runtime legal/safety holds were absent, so retention/privacy erasure could not preserve a documented held record;
-- privacy export was unbounded;
+- privacy export was unbounded and privacy erasure was not honestly paginated;
+- dispute narrative/evidence minimization needed the same hold-aware privacy handling as reports;
 - old/draft records could still reach publication with unknown (`und`) language through a non-UI API path;
 - an active recall needed an explicit final publication/reactivation gate;
 - regulated evidence needed an actual seller/reviewer UI, not API-only implementation;
+- a seller who also possessed reviewer capability needed an explicit self-review prohibition;
+- rejecting previously approved evidence on an active listing needed to pause the listing atomically;
+- recall activation paused the listing, which could make the public recall warning unreachable through an active-only lookup;
+- recalled public safety notices required `noindex`/`no-store` and disabled commerce/contact actions;
 - public listing/archive/dashboard surfaces needed evidence, recall and Seller Studio presentation;
 - prior 2.0.1/RC2 release documentation and QA assertions became stale once these corrections were made.
 
 Corrections:
 
 - added documented, time-bounded retention/legal/safety holds with authority reference, audited release and hold-aware retention/privacy behavior;
-- privacy export is batched;
+- privacy export and erasure are batched; report/dispute narrative evidence is minimized only when no active hold requires preservation;
 - final publication gates reject missing/unknown language, missing approved regulated evidence and active recall;
 - seller evidence and moderator-review forms are accessible from the seller workspace; approved evidence and active recall are shown publicly;
+- sellers cannot review their own regulated listing evidence, even if they also possess a reviewer capability;
+- evidence rejection pauses an active listing in the same transaction and emits the corresponding reliable facts;
+- active recalls remain reachable through a narrowly scoped safety-only fallback even though the normal listing is paused, and the route is noindex/no-store while contact/offer actions are disabled;
 - archive filters and Seller Studio are exposed in the user experience;
 - direct-source architecture remains mandatory; no encoded/base64 reconstruction is accepted;
 - release identity advanced to 2.1.0 RC3 and static/four-plan QA was expanded to test the new controls.
 
-## Post-correction fresh review A
+## Post-correction fresh review A — code-level adversarial re-read
 
-After the final runtime changes, the corrected source was re-read specifically for canonical ownership, duplicate backend risk, paid/donor ranking influence, identity fail-closed behavior, publication bypass, state/outbox atomicity, legal-hold behavior and privacy exposure. No additional known blocker was accepted without correction.
+After the four correction rounds, the corrected source was re-read specifically for canonical ownership, duplicate backend risk, paid/donor ranking influence, identity fail-closed behavior, publication bypass, state/outbox atomicity, self-review, recall visibility, legal-hold behavior and privacy exposure. Newly discovered blockers were corrected rather than hidden behind the earlier completion claim.
 
-## Post-correction fresh review B
+## Post-correction fresh review B — exact-head automated QA
 
-The exact corrected head must pass direct-source supply-chain checks, PHP syntax on the supported matrix, JavaScript syntax, state-machine tests, contract tests, source-architecture tests, adversarial tests, four-plan invariant tests and two deterministic release builds. Green CI evidence is required before this document may support an Automated-QA Green claim.
+The first 2.1.0 exact-head GitHub Actions run (`31194102320`) correctly rejected the candidate during PHP syntax validation because a new completion layer used the PHP 8.2 standalone `true` union type while File 18 supports PHP 8.1. That compatibility defect was corrected to PHP-8.1-compatible `bool|WP_Error`, and the invariant suite now explicitly rejects recurrence of `true|WP_Error` in the relevant final layers.
+
+The final exact corrected head must pass direct-source supply-chain checks, PHP syntax on PHP 8.1 and 8.3, JavaScript syntax, state-machine tests, contract tests, source-architecture tests, adversarial tests, four-plan invariant tests and two deterministic release builds. Green CI evidence is required before this document may support an **Automated-QA Green** claim.
 
 ## Status boundary
 
-This audit can establish only **Specified**, **Coded**, **Packaged** and **Automated-QA Green** when exact-head CI is green. It does not establish **Staging-Accepted**, **Live-Deployed** or **Operational** status. Hostinger staging, real companion integrations, two-account workflows, browser/device/accessibility evidence, backup/restore, rollback rehearsal, Founder acceptance, controlled live deployment and operational monitoring remain separate gates.
+This audit can establish only **Specified**, **Coded**, **Packaged** and **Automated-QA Green** when the final exact-head CI is green. It does not establish **Staging-Accepted**, **Live-Deployed** or **Operational** status. Hostinger staging, real companion integrations, two-account workflows, browser/device/accessibility evidence, backup/restore, rollback rehearsal, Founder acceptance, controlled live deployment and operational monitoring remain separate gates.
