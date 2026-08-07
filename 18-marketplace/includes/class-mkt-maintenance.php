@@ -36,16 +36,22 @@ final class MKT_Maintenance {
         $listings = $wpdb->get_results($wpdb->prepare("SELECT public_id,version,status FROM " . MKT_DB::table('listings') . " WHERE status IN ('active','paused') AND expires_at IS NOT NULL AND expires_at<=%s LIMIT 200", $now), ARRAY_A);
         foreach ($listings as $listing) {
             $updated = $wpdb->update(MKT_DB::table('listings'), ['status' => 'expired', 'updated_at' => $now, 'version' => (int) $listing['version'] + 1], ['public_id' => $listing['public_id'], 'version' => (int) $listing['version'], 'status' => (string) $listing['status']]);
-            if ($updated !== 1) {
-                continue;
+            if ($updated !== 1) continue;
+            try {
+                MKT_Events::enqueue('MarketplaceListingStatusChanged.v1', 'listing', (string) $listing['public_id'], ['from' => $listing['status'], 'to' => 'expired', 'safe_summary' => __('A listing expired.', 'marketplace')]);
+            } catch (Throwable $e) {
+                MKT_Audit::record('listing_expiry_event_deferred', 'listing', (string) $listing['public_id'], ['error' => 'outbox_unavailable'], 'failed', 'outbox_unavailable', 'maintenance_reconciliation');
             }
-            MKT_Events::enqueue('MarketplaceListingStatusChanged.v1', 'listing', (string) $listing['public_id'], ['from' => $listing['status'], 'to' => 'expired', 'safe_summary' => __('A listing expired.', 'marketplace')]);
         }
         $offers = $wpdb->get_results($wpdb->prepare("SELECT public_id,version,status FROM " . MKT_DB::table('offers') . " WHERE status IN ('open','countered') AND expires_at<=%s LIMIT 500", $now), ARRAY_A);
         foreach ($offers as $offer) {
             $updated = $wpdb->update(MKT_DB::table('offers'), ['status' => 'expired', 'updated_at' => $now, 'version' => (int) $offer['version'] + 1], ['public_id' => $offer['public_id'], 'version' => (int) $offer['version'], 'status' => (string) $offer['status']]);
             if ($updated === 1) {
-                MKT_Events::enqueue('MarketplaceOfferStatusChanged.v1', 'offer', (string) $offer['public_id'], ['from' => $offer['status'], 'to' => 'expired', 'safe_summary' => __('An offer expired.', 'marketplace')], 'participants');
+                try {
+                    MKT_Events::enqueue('MarketplaceOfferStatusChanged.v1', 'offer', (string) $offer['public_id'], ['from' => $offer['status'], 'to' => 'expired', 'safe_summary' => __('An offer expired.', 'marketplace')], 'participants');
+                } catch (Throwable $e) {
+                    MKT_Audit::record('offer_expiry_event_deferred', 'offer', (string) $offer['public_id'], ['error' => 'outbox_unavailable'], 'failed', 'outbox_unavailable', 'maintenance_reconciliation');
+                }
             }
         }
     }
@@ -64,13 +70,15 @@ final class MKT_Maintenance {
                 'suspended_at' => $target === 'suspended' ? MKT_DB::now() : null,
                 'version' => (int) $seller['version'] + 1,
             ], ['id' => (int) $seller['id'], 'version' => (int) $seller['version'], 'status' => (string) $seller['status']]);
-            if ($updated !== 1) {
-                continue;
-            }
+            if ($updated !== 1) continue;
             if ($target === 'suspended') {
                 $wpdb->query($wpdb->prepare("UPDATE " . MKT_DB::table('listings') . " SET status='paused',updated_at=%s,version=version+1 WHERE seller_id=%d AND status='active'", MKT_DB::now(), (int) $seller['id']));
             }
-            MKT_Events::enqueue('MarketplaceSellerStatusChanged.v1', 'seller', (string) $seller['public_id'], ['from' => $seller['status'], 'to' => $target]);
+            try {
+                MKT_Events::enqueue('MarketplaceSellerStatusChanged.v1', 'seller', (string) $seller['public_id'], ['from' => $seller['status'], 'to' => $target]);
+            } catch (Throwable $e) {
+                MKT_Audit::record('seller_reconciliation_event_deferred', 'seller', (string) $seller['public_id'], ['from' => $seller['status'], 'to' => $target], 'failed', 'outbox_unavailable', 'identity_reconciliation');
+            }
         }
     }
 
@@ -95,13 +103,9 @@ final class MKT_Maintenance {
                     $now, (int) $row['id']
                 ));
             }
-            if ($claimed !== 1) {
-                continue;
-            }
+            if ($claimed !== 1) continue;
             $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", (int) $row['id']), ARRAY_A);
-            if (!$row) {
-                continue;
-            }
+            if (!$row) continue;
             $legacy_payload = self::legacy_communication_payload((string) $row['legacy_type'], (int) $row['legacy_id']);
             if (is_wp_error($legacy_payload)) {
                 $attempts = (int) $row['attempts'];
@@ -138,13 +142,9 @@ final class MKT_Maintenance {
         }
         $table = $wpdb->prefix . ($type === 'conversation' ? 'smp_conversations' : 'smp_messages');
         $exists = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table))) === $table;
-        if (!$exists) {
-            return new WP_Error('mkt_legacy_source_missing', __('Legacy communication source table is unavailable.', 'marketplace'));
-        }
+        if (!$exists) return new WP_Error('mkt_legacy_source_missing', __('Legacy communication source table is unavailable.', 'marketplace'));
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $legacy_id), ARRAY_A);
-        if (!$row) {
-            return new WP_Error('mkt_legacy_record_missing', __('Legacy communication record is unavailable.', 'marketplace'));
-        }
+        if (!$row) return new WP_Error('mkt_legacy_record_missing', __('Legacy communication record is unavailable.', 'marketplace'));
         $allowed = $type === 'conversation'
             ? ['id','product_id','buyer_id','seller_id','seller_user_id','status','deal_status','agreed_price','currency','last_message_id','last_message_at','created_at','updated_at']
             : ['id','conversation_id','sender_id','message_type','message_text','attachment_path','attachment_name','attachment_mime','attachment_size','offer_amount','offer_status','contact_payload','reply_to','delivered_at','read_at','edited_at','deleted_for_all','deleted_at','created_at'];
@@ -170,10 +170,10 @@ final class MKT_Maintenance {
         $wpdb->query($wpdb->prepare('DELETE FROM ' . MKT_DB::table('audit') . ' WHERE created_at<%s', $audit_cutoff));
         $report_sql = "UPDATE " . MKT_DB::table('reports') . " r SET r.details='[Expired by retention policy]',r.evidence_refs='[]',r.decision_note='' WHERE r.updated_at<%s AND r.status='closed'";
         $dispute_sql = "UPDATE " . MKT_DB::table('disputes') . " d SET d.statement='[Expired by retention policy]',d.evidence_refs='[]',d.decision_note='',d.access_grants='[]' WHERE d.updated_at<%s AND d.status='closed'";
-        if (MKT_DB::table_exists('retention_holds')) {
-            $holds = MKT_DB::table('retention_holds');
-            $report_sql .= " AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='report' AND h.object_public_id=r.public_id AND h.status='active' AND (h.expires_at IS NULL OR h.expires_at>UTC_TIMESTAMP()))";
-            $dispute_sql .= " AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='dispute' AND h.object_public_id=d.public_id AND h.status='active' AND (h.expires_at IS NULL OR h.expires_at>UTC_TIMESTAMP()))";
+        if (class_exists('MKT_Governance') && MKT_Governance::table_exists('retention_holds')) {
+            $holds = MKT_Governance::table('retention_holds');
+            $report_sql .= " AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='report' AND h.object_public_id=r.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
+            $dispute_sql .= " AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='dispute' AND h.object_public_id=d.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
         }
         $wpdb->query($wpdb->prepare($report_sql, $report_cutoff));
         $wpdb->query($wpdb->prepare($dispute_sql, $dispute_cutoff));
