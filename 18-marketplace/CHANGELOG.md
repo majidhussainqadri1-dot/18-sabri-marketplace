@@ -20,8 +20,11 @@
 - Added recoverable outbox processing leases and safe failed-inbox reclaim with payload-conflict rejection.
 - Added stale/retry leasing for File 17 legacy handoffs.
 - Made REST, scheduled reconciliation/expiry and admin moderation owner-state + outbox changes atomic.
-- Made privacy export bounded and privacy/retention behavior aware of active legal/safety holds.
+- Made privacy export and erasure bounded; report/dispute narrative evidence is minimized only when no active legal/safety hold requires preservation.
 - Closed API publication bypasses for unknown language, missing approved evidence and active recall.
+- Prohibited sellers from reviewing their own regulated listing evidence; rejecting evidence now atomically pauses an active listing.
+- Kept active recall/takedown notices publicly reachable through a safety-only fallback while disabling commerce/contact and sending noindex/no-store headers.
+- Replaced the PHP 8.2 standalone `true` union return type detected by exact-head CI with PHP-8.1-compatible `bool|WP_Error`.
 - Retained zero commission, single free tier, no donor advantage, no paid ranking and no parallel File 17 chat backend as machine-enforced invariants.
 
 ### Release truth
