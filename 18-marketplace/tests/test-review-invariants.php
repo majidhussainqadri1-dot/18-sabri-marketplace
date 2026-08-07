@@ -5,6 +5,8 @@ $commerce = file_get_contents($root . '/includes/class-mkt-commerce.php');
 $moderation = file_get_contents($root . '/includes/class-mkt-moderation.php');
 $events = file_get_contents($root . '/includes/class-mkt-events.php');
 $integration = file_get_contents($root . '/includes/class-mkt-integrations.php');
+$rest_security = file_get_contents($root . '/includes/class-mkt-rest-security.php');
+$plugin = file_get_contents($root . '/marketplace.php');
 $rest = file_get_contents($root . '/includes/class-mkt-rest.php');
 $idempotency = file_get_contents($root . '/includes/class-mkt-idempotency.php');
 $admin = file_get_contents($root . '/includes/class-mkt-admin.php');
@@ -15,6 +17,8 @@ $db = file_get_contents($root . '/includes/class-mkt-db.php');
 
 assert_true(str_contains($rest, 'MKT_Idempotency::run'), 'REST mutations are replay-protected.');
 assert_true(str_contains($js, "headers['Idempotency-Key']"), 'Browser mutations emit idempotency keys.');
+assert_true(str_contains($rest_security, "did_action('application_password_did_authenticate')") && str_contains($rest_security, "get_header('X-WP-Nonce')") && str_contains($rest_security, "wp_verify_nonce"), 'REST mutation CSRF guard trusts successful Application Password authentication, not arbitrary Authorization-header presence.');
+assert_true(str_contains($plugin, "'class-mkt-rest-security.php'") && str_contains($plugin, "['MKT_REST_Security','boot']"), 'Strict REST mutation CSRF guard is loaded and booted.');
 assert_true(str_contains($idempotency, 'request_hash') && str_contains($idempotency, 'mkt_idempotency_conflict'), 'Idempotency key reuse with altered payload is rejected.');
 assert_true(str_contains($commerce, "SELECT l.*,s.public_id") && str_contains($commerce, 'FOR UPDATE'), 'Offer acceptance locks listing and rechecks seller state.');
 assert_true(substr_count($commerce, 'FOR UPDATE') >= 3 && str_contains($commerce, 'fresh_listing') && substr_count($commerce, 'MKT_Auth::seller_eligibility') >= 2, 'Offer and counter creation re-lock canonical listing state and revalidate current seller eligibility.');
