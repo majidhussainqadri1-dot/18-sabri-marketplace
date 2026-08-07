@@ -4,7 +4,7 @@
 **Branch:** `feat/file-18-marketplace-plan-complete-2.0.0`  
 **Extended-audit baseline:** `3b8ff64edd4e1a510e2d8c198a004b2928f5447e`  
 **Final reviewed source head:** `2e1e89db1fe655a37043dfe32d1bf223d83a842d`  
-**Audit-report verification commit:** `1278b191e3b35514f3cecb5c55a7551572fb3c50`  
+**Verified audit-report commit:** `1278b191e3b35514f3cecb5c55a7551572fb3c50`  
 **Runtime / Schema / Contract:** `2.1.0 / 2.1.0 / 1.2.0`  
 **Date:** 2026-08-07 (PKT)
 
@@ -36,7 +36,8 @@ A round is marked **DEFECT** only when the extended audit found a concrete imple
 | Rounds in which no new defect was found | **30** |
 | Defect-bearing rounds corrected and re-reviewed | **10 / 10** |
 | Known unresolved code/plan defects after round 40 | **0** |
-| Completed audit-report commit verification | **PASS — GitHub Actions run 31202372985** |
+| Verified forty-round audit commit | `1278b191e3b35514f3cecb5c55a7551572fb3c50` |
+| Verification | **PASS — GitHub Actions run 31202372985** |
 | PHP matrix | **8.1 PASS / 8.3 PASS** |
 | Deterministic release artifact | `file18-marketplace-2.1.0-rc3` — artifact `9003336175` |
 | Installable ZIP SHA-256 | `17a9d7dc35137341fe14cfc84ac78987da74f9e4ee585e44bc0f673552b4b58f` |
@@ -84,11 +85,11 @@ A round is marked **DEFECT** only when the extended audit found a concrete imple
 | 37 | Public/private/noindex/no-cache route boundaries and record-existence leakage | **CLEAN** | Private/dashboard/deal surfaces and recalled/sensitive states retain constrained caching/indexing behavior. |
 | 38 | PHP 8.1/8.3 language compatibility, JS syntax and direct-source reviewability | **CLEAN** | Previous PHP 8.1 `true`-union defect was already corrected; exact-head matrix passed both PHP versions. |
 | 39 | Deterministic package build, archive integrity and direct-source supply-chain gate | **CLEAN** | Workflow double-build/cmp/unzip/checksum gate passed; no encoded reconstruction source accepted. |
-| 40 | Fresh full-regression / four-plan adversarial verification | **CLEAN** | Completed forty-round report commit `1278b191e3b35514f3cecb5c55a7551572fb3c50` passed GitHub Actions run `31202372985`: PHP 8.1/8.3, static, state-machine, contracts, architecture, adversarial, four-plan invariants and deterministic build. |
+| 40 | Fresh full-regression / four-plan adversarial verification | **CLEAN** | Verified audit-report commit `1278b191e3b35514f3cecb5c55a7551572fb3c50` passed GitHub Actions run `31202372985`: PHP 8.1/8.3, static, state-machine, contracts, architecture, adversarial, four-plan invariants and deterministic build. |
 
 ## Correction summary
 
-The ten defect-bearing rounds were not deferred. Each source defect was corrected before the audit advanced to its final clean state, and a paired or existing regression/invariant suite was used to re-check the repaired control. The completed forty-round report commit was then verified by GitHub Actions run `31202372985`, which passed on both PHP 8.1 and PHP 8.3 and produced deterministic RC3 artifact `9003336175` with installable ZIP SHA-256 `17a9d7dc35137341fe14cfc84ac78987da74f9e4ee585e44bc0f673552b4b58f`.
+The ten defect-bearing rounds were not deferred. Each source defect was corrected before the audit advanced to its final clean state, and a paired or existing regression/invariant suite was used to re-check the repaired control. The verified audit-report commit passed GitHub Actions run `31202372985` on both PHP 8.1 and PHP 8.3 and produced deterministic RC3 artifact `9003336175` with installable ZIP SHA-256 `17a9d7dc35137341fe14cfc84ac78987da74f9e4ee585e44bc0f673552b4b58f`.
 
 ## Truthful completion boundary
 
