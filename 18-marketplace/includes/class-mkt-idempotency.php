@@ -26,16 +26,28 @@ final class MKT_Idempotency {
                 $cached = json_decode((string) $row['response_json'], true);
                 return $cached ?? true;
             }
-            $claimable = (string) $row['status'] === 'failed'
-                || ((string) $row['status'] === 'processing' && strtotime((string) $row['expires_at']) <= time());
+            $previous_status = (string) $row['status'];
+            $previous_expiry = (string) $row['expires_at'];
+            $processing_expired = $previous_status === 'processing' && strtotime($previous_expiry) <= time();
+            $claimable = $previous_status === 'failed' || $processing_expired;
             if (!$claimable) {
                 return new WP_Error('mkt_request_in_progress', __('An identical request is already in progress.', 'marketplace'), ['status' => 409, 'retry_after' => 2]);
             }
-            $previous_status = (string) $row['status'];
-            $claimed = $wpdb->query($wpdb->prepare(
-                "UPDATE {$table} SET status='processing',response_code=0,response_json=NULL,created_at=%s,expires_at=%s WHERE id=%d AND status=%s",
-                MKT_DB::now(), gmdate('Y-m-d H:i:s', time() + DAY_IN_SECONDS), (int) $row['id'], $previous_status
-            ));
+
+            $new_expiry = gmdate('Y-m-d H:i:s', time() + DAY_IN_SECONDS);
+            if ($previous_status === 'processing') {
+                // Compare-and-swap on the observed lease. A concurrent retry that already
+                // renewed the lease can no longer match this exact expired row.
+                $claimed = $wpdb->query($wpdb->prepare(
+                    "UPDATE {$table} SET status='processing',response_code=0,response_json=NULL,created_at=%s,expires_at=%s WHERE id=%d AND status='processing' AND expires_at=%s AND expires_at<=UTC_TIMESTAMP()",
+                    MKT_DB::now(), $new_expiry, (int) $row['id'], $previous_expiry
+                ));
+            } else {
+                $claimed = $wpdb->query($wpdb->prepare(
+                    "UPDATE {$table} SET status='processing',response_code=0,response_json=NULL,created_at=%s,expires_at=%s WHERE id=%d AND status='failed' AND request_hash=%s",
+                    MKT_DB::now(), $new_expiry, (int) $row['id'], $request_hash
+                ));
+            }
             if ($claimed !== 1) {
                 return new WP_Error('mkt_request_in_progress', __('An identical request is already being retried.', 'marketplace'), ['status' => 409, 'retry_after' => 2]);
             }
