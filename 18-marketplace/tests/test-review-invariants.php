@@ -2,6 +2,7 @@
 require __DIR__ . '/bootstrap.php';
 $root = dirname(__DIR__);
 $commerce = file_get_contents($root . '/includes/class-mkt-commerce.php');
+$moderation = file_get_contents($root . '/includes/class-mkt-moderation.php');
 $rest = file_get_contents($root . '/includes/class-mkt-rest.php');
 $idempotency = file_get_contents($root . '/includes/class-mkt-idempotency.php');
 $admin = file_get_contents($root . '/includes/class-mkt-admin.php');
@@ -19,6 +20,8 @@ assert_true(substr_count($commerce, 'MKT_Auth::seller_eligibility') >= 3 && str_
 assert_true(str_contains($commerce, "listing_status === 'sold_unavailable'"), 'Sold-out acceptance closes every competing live offer.');
 assert_true(str_contains($commerce, 'mkt_deal_reviewer_scope'), 'Reviewer access is restricted to disputed/resolved deals.');
 assert_true(str_contains($commerce, 'mkt_dispute_record_required'), 'Deal dispute state requires a structured dispute record.');
+assert_true(str_contains($moderation, "'non_delivery'") && str_contains($moderation, "'impersonation'") && str_contains($moderation, "'child_safety'"), 'Canonical moderation API preserves the complete safety-report taxonomy.');
+assert_true(str_contains($moderation, '$listing_result = MKT_Listings::transition') && str_contains($moderation, 'if (is_wp_error($listing_result))'), 'Listing restriction failures propagate so the owner transaction can roll back the report state.');
 assert_true(str_contains($admin, "current_user_can('mkt_moderate')") && str_contains($admin, "current_user_can('mkt_review_disputes')"), 'Moderation UI follows least privilege.');
 assert_true(str_contains($privacy, "'dispute' => \$wpdb->get_results") && str_contains($privacy, "MKT_DB::table('disputes')") && str_contains($privacy, "'group_id' => 'mkt-' . \$type"), 'Privacy export includes participant disputes through the generic bounded exporter.');
 assert_true(str_contains($privacy, 'private const EXPORT_BATCH = 100') && str_contains($privacy, 'private const ERASE_BATCH = 100'), 'Privacy export and erasure are bounded.');
