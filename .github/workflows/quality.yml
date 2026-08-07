@@ -55,8 +55,28 @@ jobs:
         run: php 18-marketplace/tests/test-source-architecture.php
       - name: Adversarial invariant tests
         run: php 18-marketplace/tests/test-review-invariants.php
-      - name: Four-plan invariant tests
-        run: php 18-marketplace/tests/test-four-plan-invariants.php
+      - name: Four-plan invariant diagnostic
+        id: fourplan
+        shell: bash
+        run: |
+          set +e
+          php 18-marketplace/tests/test-four-plan-invariants.php > "$RUNNER_TEMP/four-plan-${{ matrix.php }}.log" 2>&1
+          code=$?
+          printf '%s\n' "$code" > "$RUNNER_TEMP/four-plan-${{ matrix.php }}.exit"
+          cat "$RUNNER_TEMP/four-plan-${{ matrix.php }}.log"
+          exit 0
+      - name: Upload four-plan diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: file18-four-plan-diagnostic-php-${{ matrix.php }}
+          path: |
+            ${{ runner.temp }}/four-plan-${{ matrix.php }}.log
+            ${{ runner.temp }}/four-plan-${{ matrix.php }}.exit
+          if-no-files-found: error
+          retention-days: 2
+      - name: Enforce four-plan invariant result
+        shell: bash
+        run: test "$(cat "$RUNNER_TEMP/four-plan-${{ matrix.php }}.exit")" = '0'
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Deterministic release build
