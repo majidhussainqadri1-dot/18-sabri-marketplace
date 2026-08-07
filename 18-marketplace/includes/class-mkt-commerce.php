@@ -256,6 +256,10 @@ final class MKT_Commerce {
         if (!$listing || $listing['status'] !== 'active' || $listing['seller_status'] !== 'approved') {
             return new WP_Error('mkt_listing_unavailable', __('The listing is no longer available.', 'marketplace'), ['status' => 409]);
         }
+        $seller_eligibility = MKT_Auth::seller_eligibility((int) $listing['seller_user_id']);
+        if (empty($seller_eligibility['eligible'])) {
+            return new WP_Error('mkt_listing_unavailable', __('The seller is no longer eligible to enter a marketplace deal.', 'marketplace'), ['status' => 409]);
+        }
         $existing = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE accepted_offer_id=%d', (int) $offer['id']), ARRAY_A);
         if ($existing) {
             return self::deal_dto($existing);
