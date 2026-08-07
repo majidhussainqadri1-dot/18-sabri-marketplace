@@ -19,6 +19,7 @@ final class MKT_Integrations {
     public static function identity_assertions(int $user_id): array {
         $empty = [
             'available' => false,
+            'compatible' => false,
             'user_id' => $user_id,
             'platform_uuid' => '',
             'status' => 'unknown',
@@ -32,10 +33,9 @@ final class MKT_Integrations {
             'capabilities' => [],
             'roles' => [],
             'version' => '',
+            'contract_mode' => 'unavailable',
         ];
-        if ($user_id <= 0) {
-            return $empty;
-        }
+        if ($user_id <= 0) return $empty;
 
         $raw = apply_filters('sabri_identity_assertions', null, $user_id, 'marketplace');
         if (!is_array($raw) && function_exists('smc_get_marketplace_assertions')) {
@@ -45,6 +45,7 @@ final class MKT_Integrations {
             $profile = smc_get_profile($user_id);
             $raw = [
                 'available' => true,
+                'compatible' => true,
                 'status' => (string) smc_user_status($user_id),
                 'platform_uuid' => is_array($profile) ? (string) ($profile['platform_uuid'] ?? '') : '',
                 'age' => is_array($profile) && isset($profile['age']) ? (int) $profile['age'] : null,
@@ -52,30 +53,59 @@ final class MKT_Integrations {
                 'guardian_verified' => is_array($profile) && !empty($profile['guardian_verified']),
                 'risk_state' => is_array($profile) ? (string) ($profile['risk_state'] ?? 'unknown') : 'unknown',
                 'capabilities' => is_array($profile) && isset($profile['capabilities']) && is_array($profile['capabilities']) ? $profile['capabilities'] : [],
+                'roles' => is_array($profile) && isset($profile['roles']) && is_array($profile['roles']) ? $profile['roles'] : [],
                 'version' => defined('SMC_VERSION') ? (string) SMC_VERSION : 'legacy',
+                'contract_mode' => 'legacy_compat',
             ];
         }
-        if (!is_array($raw)) {
-            return $empty;
+        if (!is_array($raw)) return $empty;
+
+        // An identity provider may explicitly declare itself unavailable/degraded.
+        // Never overwrite that signal with local optimism.
+        if (array_key_exists('available', $raw) && !$raw['available']) {
+            $unavailable = array_replace($empty, $raw);
+            $unavailable['available'] = false;
+            $unavailable['compatible'] = false;
+            $unavailable['user_id'] = $user_id;
+            return $unavailable;
         }
 
         $assertions = array_replace($empty, $raw);
-        $assertions['available'] = true;
         $assertions['user_id'] = $user_id;
         $assertions['status'] = sanitize_key((string) $assertions['status']);
+        $allowed_statuses = ['pending','approved','verified','active','limited','suspended','banned','revoked','rejected','expired'];
+        if (!in_array($assertions['status'], $allowed_statuses, true)) {
+            $assertions['available'] = false;
+            $assertions['compatible'] = false;
+            $assertions['status'] = 'unknown';
+            $assertions['contract_mode'] = 'malformed';
+            return $assertions;
+        }
+
+        $assertions['roles'] = array_values(array_unique(array_filter(array_map('sanitize_key', (array) $assertions['roles']))));
+        $assertions['capabilities'] = array_values(array_unique(array_filter(array_map('sanitize_key', (array) $assertions['capabilities']))));
+        $assertions['risk_state'] = sanitize_key((string) $assertions['risk_state']);
+        if (!in_array($assertions['risk_state'], ['low','normal','medium','elevated','high','critical','blocked','unknown'], true)) {
+            $assertions['risk_state'] = 'unknown';
+        }
         $assertions['approved'] = !empty($assertions['approved']) || in_array($assertions['status'], ['approved','verified','active'], true);
         $assertions['verified'] = !empty($assertions['verified']) || $assertions['status'] === 'verified';
         $assertions['suspended'] = !empty($assertions['suspended']) || in_array($assertions['status'], ['suspended','banned','revoked'], true);
         $assertions['guardian_verified'] = (bool) $assertions['guardian_verified'];
-        $assertions['roles'] = array_values(array_filter(array_map('sanitize_key', (array) $assertions['roles'])));
-        $assertions['capabilities'] = array_values(array_filter(array_map('sanitize_key', (array) $assertions['capabilities'])));
+        if ($assertions['is_minor'] !== null) $assertions['is_minor'] = (bool) $assertions['is_minor'];
+        if ($assertions['age'] !== null) $assertions['age'] = max(0, min(130, (int) $assertions['age']));
+        $assertions['version'] = sanitize_text_field((string) $assertions['version']);
+
+        $provider_compatible = array_key_exists('compatible', $raw) ? (bool) $raw['compatible'] : true;
+        $provider_compatible = (bool) apply_filters('mkt_identity_contract_compatible', $provider_compatible, $assertions['version'], $raw);
+        $assertions['compatible'] = $provider_compatible;
+        $assertions['available'] = $provider_compatible;
+        $assertions['contract_mode'] = sanitize_key((string) ($assertions['contract_mode'] ?: ($assertions['version'] !== '' ? 'versioned' : 'legacy_compat')));
         return $assertions;
     }
 
     public static function communication_status(): array {
-        if (isset(self::$status_cache['communication'])) {
-            return self::$status_cache['communication'];
-        }
+        if (isset(self::$status_cache['communication'])) return self::$status_cache['communication'];
         $available = has_filter('sabri_communication_open_context_conversation')
             || function_exists('sabri_network_open_context_conversation')
             || function_exists('sn_open_context_conversation');
@@ -101,7 +131,6 @@ final class MKT_Integrations {
             'status' => sanitize_key((string) ($context['status'] ?? '')),
             'snapshot_hash' => sanitize_text_field((string) ($context['snapshot_hash'] ?? '')),
         ];
-
         if (function_exists('sabri_network_open_context_conversation')) {
             $result = sabri_network_open_context_conversation($actor_id, $other_user_id, $context);
         } elseif (function_exists('sn_open_context_conversation')) {
@@ -109,9 +138,7 @@ final class MKT_Integrations {
         } else {
             $result = apply_filters('sabri_communication_open_context_conversation', null, $actor_id, $other_user_id, $context);
         }
-        if (is_wp_error($result)) {
-            return $result;
-        }
+        if (is_wp_error($result)) return $result;
         if (!is_array($result) || (empty($result['conversation_id']) && empty($result['public_id'])) || empty($result['url'])) {
             return new WP_Error('mkt_communication_unavailable', __('Product-linked conversation is temporarily unavailable.', 'marketplace'), ['status' => 503]);
         }
@@ -122,9 +149,7 @@ final class MKT_Integrations {
     }
 
     public static function notify(int $user_id, string $event_type, array $context, string $dedupe_key): bool {
-        if ($user_id <= 0) {
-            return false;
-        }
+        if ($user_id <= 0) return false;
         $event = [
             'recipient_user_id' => $user_id,
             'event_type' => preg_match('/^[A-Za-z0-9_.-]{1,120}$/', $event_type) ? $event_type : 'MarketplaceEvent.v1',
@@ -135,20 +160,14 @@ final class MKT_Integrations {
             'dedupe_key' => sanitize_text_field($dedupe_key),
             'context' => $context,
         ];
-        if (function_exists('sabri_notify_event')) {
-            return (bool) sabri_notify_event($event);
-        }
-        if (function_exists('sabri_notify_user')) {
-            return (bool) sabri_notify_user($event);
-        }
+        if (function_exists('sabri_notify_event')) return (bool) sabri_notify_event($event);
+        if (function_exists('sabri_notify_user')) return (bool) sabri_notify_user($event);
         return (bool) apply_filters('sabri_notifications_ingest_event', false, $event);
     }
 
     public static function media_reference(array $input, int $actor_id): array|WP_Error {
         $result = apply_filters('sabri_media_create_reference', null, $input, $actor_id, 'marketplace');
-        if (is_wp_error($result)) {
-            return $result;
-        }
+        if (is_wp_error($result)) return $result;
         if (!is_array($result) || empty($result['public_id'])) {
             return new WP_Error('mkt_media_provider_unavailable', __('The secure media provider is unavailable.', 'marketplace'), ['status' => 503]);
         }
@@ -172,15 +191,8 @@ final class MKT_Integrations {
 
     public static function shell_navigation(array $destinations): array {
         $destinations['marketplace'] = [
-            'label' => __('Marketplace', 'marketplace'),
-            'url' => home_url('/marketplace/'),
-            'icon' => 'store',
-            'group' => 'platform',
-            'slugs' => ['marketplace'],
-            'shortcodes' => [],
-            'post_type' => '',
-            'order' => 180,
-            'owner' => 'file-18-marketplace',
+            'label' => __('Marketplace', 'marketplace'), 'url' => home_url('/marketplace/'), 'icon' => 'store', 'group' => 'platform',
+            'slugs' => ['marketplace'], 'shortcodes' => [], 'post_type' => '', 'order' => 180, 'owner' => 'file-18-marketplace',
         ];
         return $destinations;
     }
@@ -191,11 +203,8 @@ final class MKT_Integrations {
 
     public static function search_provider(array $providers): array {
         $providers['marketplace'] = [
-            'owner' => 'file-18-marketplace',
-            'version' => MKT_CONTRACT_VERSION,
-            'label' => __('Marketplace', 'marketplace'),
-            'query_callback' => ['MKT_Listings', 'search_provider_query'],
-            'public' => true,
+            'owner' => 'file-18-marketplace', 'version' => MKT_CONTRACT_VERSION, 'label' => __('Marketplace', 'marketplace'),
+            'query_callback' => ['MKT_Listings', 'search_provider_query'], 'public' => true,
         ];
         return $providers;
     }
@@ -207,7 +216,7 @@ final class MKT_Integrations {
     public static function assurance_controls(): void {
         do_action('sabri_assurance_register_native_control', [
             'owner' => 'file-18-marketplace',
-            'controls' => ['authorization','listing-policy','zero-commission','deal-integrity','privacy','moderation','audit','retention'],
+            'controls' => ['authorization','listing-policy','zero-commission','deal-integrity','privacy','moderation','audit','retention','structured-evidence','recall-takedown'],
             'status_callback' => ['MKT_Admin', 'system_status'],
         ]);
     }
@@ -215,16 +224,14 @@ final class MKT_Integrations {
     public static function status(): array {
         $identity = self::identity_assertions(get_current_user_id());
         return [
-            'identity' => ['available' => $identity['available'], 'version' => $identity['version']],
+            'identity' => ['available' => $identity['available'], 'compatible' => $identity['compatible'], 'version' => $identity['version'], 'contract_mode' => $identity['contract_mode']],
             'communication' => self::communication_status(),
             'notifications' => [
                 'available' => function_exists('sabri_notify_event') || function_exists('sabri_notify_user') || has_filter('sabri_notifications_ingest_event'),
                 'version' => defined('SUN_VERSION') ? (string) SUN_VERSION : '',
             ],
             'shell' => [
-                'available' => defined('SABRI_UNIFIED_SHELL_VERSION')
-                    || class_exists('Sabri\\UnifiedShell\\Layout')
-                    || function_exists('sabri_unified_shell_register_destination'),
+                'available' => defined('SABRI_UNIFIED_SHELL_VERSION') || class_exists('Sabri\\UnifiedShell\\Layout') || function_exists('sabri_unified_shell_register_destination'),
                 'version' => defined('SABRI_UNIFIED_SHELL_VERSION') ? (string) SABRI_UNIFIED_SHELL_VERSION : '',
             ],
             'visual' => [
