@@ -15,6 +15,7 @@ assert_true(str_contains($js, "headers['Idempotency-Key']"), 'Browser mutations 
 assert_true(str_contains($idempotency, 'request_hash') && str_contains($idempotency, 'mkt_idempotency_conflict'), 'Idempotency key reuse with altered payload is rejected.');
 assert_true(str_contains($commerce, "SELECT l.*,s.public_id") && str_contains($commerce, 'FOR UPDATE'), 'Offer acceptance locks listing and rechecks seller state.');
 assert_true(substr_count($commerce, 'FOR UPDATE') >= 3 && str_contains($commerce, 'fresh_listing') && substr_count($commerce, 'MKT_Auth::seller_eligibility') >= 2, 'Offer and counter creation re-lock canonical listing state and revalidate current seller eligibility.');
+assert_true(substr_count($commerce, 'MKT_Auth::seller_eligibility') >= 3 && str_contains($commerce, 'no longer eligible to enter a marketplace deal'), 'Deal commitment revalidates authoritative seller eligibility after the listing lock.');
 assert_true(str_contains($commerce, "listing_status === 'sold_unavailable'"), 'Sold-out acceptance closes every competing live offer.');
 assert_true(str_contains($commerce, 'mkt_deal_reviewer_scope'), 'Reviewer access is restricted to disputed/resolved deals.');
 assert_true(str_contains($commerce, 'mkt_dispute_record_required'), 'Deal dispute state requires a structured dispute record.');
