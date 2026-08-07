@@ -2,10 +2,12 @@
 defined('ABSPATH') || exit;
 
 final class MKT_Events {
+    private const OUTBOX_PROCESSING_LEASE_SECONDS = 120;
+
     public static function enqueue(string $event_type, string $aggregate_type, string $aggregate_public_id, array $payload, string $privacy_class = 'internal'): string {
         global $wpdb;
         $event_id = MKT_DB::uuid();
-        $wpdb->insert(MKT_DB::table('outbox'), [
+        $inserted = $wpdb->insert(MKT_DB::table('outbox'), [
             'event_id' => $event_id,
             'event_type' => sanitize_text_field($event_type),
             'aggregate_type' => sanitize_key($aggregate_type),
@@ -18,6 +20,9 @@ final class MKT_Events {
             'available_at' => MKT_DB::now(),
             'created_at' => MKT_DB::now(),
         ]);
+        if (!$inserted) {
+            throw new RuntimeException('Marketplace outbox event could not be persisted.');
+        }
         if (!wp_next_scheduled('mkt_process_outbox')) {
             wp_schedule_single_event(time() + 5, 'mkt_process_outbox');
         }
@@ -42,18 +47,38 @@ final class MKT_Events {
     public static function process_outbox(): void {
         global $wpdb;
         $table = MKT_DB::table('outbox');
-        $rows = $wpdb->get_results("SELECT * FROM {$table} WHERE status IN ('pending','retry') AND available_at<=UTC_TIMESTAMP() ORDER BY id ASC LIMIT 50", ARRAY_A);
+        // available_at doubles as the retry time for pending/retry rows and as a
+        // processing-lease deadline for claimed rows. A crashed worker is therefore
+        // recoverable without a new schema column.
+        $rows = $wpdb->get_results(
+            "SELECT * FROM {$table} WHERE ((status IN ('pending','retry') AND available_at<=UTC_TIMESTAMP()) OR (status='processing' AND available_at<=UTC_TIMESTAMP())) ORDER BY id ASC LIMIT 50",
+            ARRAY_A
+        );
         foreach ($rows as $row) {
             $id = (int) $row['id'];
             $attempts = (int) $row['attempts'] + 1;
-            $claimed = $wpdb->query($wpdb->prepare("UPDATE {$table} SET status='processing',attempts=%d WHERE id=%d AND status IN ('pending','retry')", $attempts, $id));
-            if (!$claimed) {
+            $lease_until = gmdate('Y-m-d H:i:s', time() + self::OUTBOX_PROCESSING_LEASE_SECONDS);
+            if ((string) $row['status'] === 'processing') {
+                $claimed = $wpdb->query($wpdb->prepare(
+                    "UPDATE {$table} SET status='processing',attempts=%d,available_at=%s,last_error=%s WHERE id=%d AND status='processing' AND available_at<=UTC_TIMESTAMP()",
+                    $attempts, $lease_until, 'Recovered stale processing lease.', $id
+                ));
+            } else {
+                $claimed = $wpdb->query($wpdb->prepare(
+                    "UPDATE {$table} SET status='processing',attempts=%d,available_at=%s WHERE id=%d AND status IN ('pending','retry') AND available_at<=UTC_TIMESTAMP()",
+                    $attempts, $lease_until, $id
+                ));
+            }
+            if ($claimed !== 1) {
                 continue;
             }
             $event = json_decode((string) $row['payload_json'], true);
             $ok = false;
             $error = '';
             try {
+                if (!is_array($event)) {
+                    throw new RuntimeException('Outbox event envelope is malformed.');
+                }
                 $platform_ack = (bool) apply_filters('sabri_platform_ingest_event', false, $event);
                 $local_consumers = has_action('mkt_event') > 0;
                 if ($local_consumers) {
@@ -69,16 +94,16 @@ final class MKT_Events {
                 $error = mb_substr($e->getMessage(), 0, 240);
             }
             if ($ok) {
-                $wpdb->update($table, ['status' => 'processed', 'processed_at' => MKT_DB::now(), 'last_error' => ''], ['id' => $id]);
+                $wpdb->update($table, ['status' => 'processed', 'processed_at' => MKT_DB::now(), 'last_error' => ''], ['id' => $id, 'status' => 'processing']);
             } elseif ($attempts >= 8) {
-                $wpdb->update($table, ['status' => 'dead', 'last_error' => $error ?: 'No consumer acknowledged the event.'], ['id' => $id]);
+                $wpdb->update($table, ['status' => 'dead', 'last_error' => $error ?: 'No consumer acknowledged the event.'], ['id' => $id, 'status' => 'processing']);
             } else {
                 $delay = min(3600, 30 * (2 ** min($attempts, 6)));
                 $wpdb->update($table, [
                     'status' => 'retry',
                     'available_at' => gmdate('Y-m-d H:i:s', time() + $delay),
                     'last_error' => $error ?: 'Retry scheduled.',
-                ], ['id' => $id]);
+                ], ['id' => $id, 'status' => 'processing']);
             }
         }
     }
@@ -103,7 +128,6 @@ final class MKT_Events {
         return $attempted && $delivered;
     }
 
-
     public static function handle_external_event($event, $source = 'platform'): void {
         if (!is_array($event)) {
             return;
@@ -121,12 +145,15 @@ final class MKT_Events {
                 if (!$seller) {
                     return true;
                 }
-                $wpdb->update(MKT_DB::table('sellers'), [
+                $updated = $wpdb->update(MKT_DB::table('sellers'), [
                     'status' => 'suspended',
                     'suspended_at' => MKT_DB::now(),
                     'updated_at' => MKT_DB::now(),
                     'version' => (int) $seller['version'] + 1,
                 ], ['id' => (int) $seller['id'], 'version' => (int) $seller['version']]);
+                if ($updated !== 1) {
+                    return new WP_Error('mkt_seller_reconciliation_conflict', 'Seller state changed during suspension reconciliation.');
+                }
                 $wpdb->query($wpdb->prepare("UPDATE " . MKT_DB::table('listings') . " SET status='paused',updated_at=%s,version=version+1 WHERE seller_id=%d AND status='active'", MKT_DB::now(), (int) $seller['id']));
                 MKT_Audit::record('external_seller_suspended', 'seller', (string) $seller['public_id'], ['source_event_id' => (string) ($event['event_id'] ?? '')], 'success', '', 'identity_reconciliation');
                 return true;
@@ -142,11 +169,14 @@ final class MKT_Events {
                 if (!$deal) {
                     return true;
                 }
-                $wpdb->update(MKT_DB::table('deals'), [
+                $updated = $wpdb->update(MKT_DB::table('deals'), [
                     'payment_status' => $status,
                     'updated_at' => MKT_DB::now(),
                     'version' => (int) $deal['version'] + 1,
                 ], ['id' => (int) $deal['id'], 'version' => (int) $deal['version']]);
+                if ($updated !== 1) {
+                    return new WP_Error('mkt_payment_reconciliation_conflict', 'Deal state changed during payment reconciliation.');
+                }
                 MKT_Audit::record('external_payment_status_changed', 'deal', $deal_public_id, ['status' => $status, 'source_event_id' => (string) ($event['event_id'] ?? '')], 'success', '', 'payment_reconciliation');
                 return true;
             }
