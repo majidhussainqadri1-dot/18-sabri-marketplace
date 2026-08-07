@@ -37,6 +37,7 @@ $includes = [
     'class-mkt-moderation.php',
     'class-mkt-governance.php',
     'class-mkt-plan-completion.php',
+    'class-mkt-finalization.php',
     'class-mkt-privacy.php',
     'class-mkt-maintenance.php',
     'class-mkt-rest.php',
@@ -64,6 +65,7 @@ final class MKT_Plugin {
         add_action('plugins_loaded', ['MKT_Integrations', 'boot'], 20);
         add_action('plugins_loaded', ['MKT_Governance', 'boot'], 25);
         add_action('plugins_loaded', ['MKT_Plan_Completion', 'boot'], 30);
+        add_action('plugins_loaded', ['MKT_Finalization', 'boot'], 35);
         add_action('init', [$this, 'init'], 5);
         add_action('rest_api_init', ['MKT_REST', 'register_routes']);
         add_action('sabri_platform_event', ['MKT_Events', 'handle_external_event'], 20, 2);
