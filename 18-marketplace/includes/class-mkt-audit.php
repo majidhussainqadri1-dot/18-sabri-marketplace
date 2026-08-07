@@ -20,7 +20,7 @@ final class MKT_Audit {
         if (!$locked) $safe_details['audit_chain_lock_gap'] = true;
         $payload = wp_json_encode([$previous,$trace_id,$actor,sanitize_key($action),sanitize_key($object_type),sanitize_text_field($object_public_id),sanitize_text_field($purpose),sanitize_key($outcome),sanitize_key($reason_code),$safe_details,$created_at]);
         $entry_hash = hash_hmac('sha256', (string) $payload, wp_salt('auth'));
-        $wpdb->insert($table, [
+        $inserted = $wpdb->insert($table, [
             'entry_id' => MKT_DB::uuid(),
             'trace_id' => $trace_id,
             'actor_user_id' => $actor,
@@ -36,6 +36,11 @@ final class MKT_Audit {
             'created_at' => $created_at,
         ]);
         if ($locked) $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock_name));
+        if (!$inserted) {
+            // Audit is part of the governed owner transaction. A silent audit-write
+            // loss would let a state mutation commit without its required evidence.
+            throw new RuntimeException('Marketplace audit evidence could not be persisted.');
+        }
         do_action('mkt_audit_recorded', $trace_id, $action, $object_type, $object_public_id, $outcome);
         return $trace_id;
     }
