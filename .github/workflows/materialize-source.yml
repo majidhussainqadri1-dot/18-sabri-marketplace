@@ -1,0 +1,37 @@
+name: Materialize File 18 Canonical Source
+on:
+  push:
+    branches:
+      - feat/file-18-marketplace-plan-complete-2.0.0
+permissions:
+  contents: write
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/file-18-marketplace-plan-complete-2.0.0
+          fetch-depth: 0
+      - name: Reconstruct audited canonical source
+        run: bash reconstruct-source.sh
+      - name: Replace opaque source bundle with reviewable source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/quality.yml')
+          s = p.read_text()
+          s = s.replace('      - name: Reconstruct canonical source\n        run: bash reconstruct-source.sh\n', '')
+          p.write_text(s)
+          PY
+          rm -rf bundles patches reconstruct-source.sh SOURCE-BUNDLE.md
+          rm -f .github/workflows/materialize-source.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Materialize canonical File 18 source tree for direct review'
+          git push origin HEAD:feat/file-18-marketplace-plan-complete-2.0.0
