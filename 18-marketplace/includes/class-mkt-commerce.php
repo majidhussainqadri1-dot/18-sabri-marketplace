@@ -31,7 +31,7 @@ final class MKT_Commerce {
         $expires_hours = min(168, max(1, (int) ($input['expires_hours'] ?? 48)));
         global $wpdb;
         try {
-            return MKT_DB::transaction(function() use ($wpdb, $listing, $buyer_id, $seller_id, $amount, $currency, $input, $idempotency_key, $expires_hours) {
+            return MKT_DB::transaction(function() use ($wpdb, $listing, $buyer_id, $amount, $currency, $input, $idempotency_key, $expires_hours) {
                 $existing = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE idempotency_key=%s', $idempotency_key), ARRAY_A);
                 if ($existing) {
                     if ((int) $existing['buyer_user_id'] !== $buyer_id) {
@@ -39,13 +39,36 @@ final class MKT_Commerce {
                     }
                     return self::offer_dto($existing);
                 }
+
+                // The public pre-check is only an early rejection. Re-lock and revalidate
+                // the canonical listing/seller state inside the transaction so a concurrent
+                // pause, removal, recall or seller suspension cannot create a stale offer.
+                $fresh_listing = $wpdb->get_row($wpdb->prepare(
+                    'SELECT l.*,s.user_id AS seller_user_id,s.status AS seller_status FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d FOR UPDATE',
+                    (int) $listing['id']
+                ), ARRAY_A);
+                if (!$fresh_listing || (string) $fresh_listing['status'] !== 'active' || (string) $fresh_listing['availability'] === 'unavailable' || (string) $fresh_listing['seller_status'] !== 'approved') {
+                    return new WP_Error('mkt_listing_unavailable', __('The listing is no longer available for offers.', 'marketplace'), ['status' => 409]);
+                }
+                $fresh_seller_id = (int) $fresh_listing['seller_user_id'];
+                if ($fresh_seller_id === $buyer_id) {
+                    return new WP_Error('mkt_self_offer', __('You cannot offer on your own listing.', 'marketplace'), ['status' => 422]);
+                }
+                $seller_eligibility = MKT_Auth::seller_eligibility($fresh_seller_id);
+                if (empty($seller_eligibility['eligible'])) {
+                    return new WP_Error('mkt_listing_unavailable', __('The seller is no longer eligible to receive offers.', 'marketplace'), ['status' => 409]);
+                }
+                if ($currency !== (string) $fresh_listing['currency']) {
+                    return new WP_Error('mkt_invalid_offer', __('The listing currency changed. Reload before making an offer.', 'marketplace'), ['status' => 409]);
+                }
+
                 $public_id = MKT_DB::uuid();
                 $now = MKT_DB::now();
-                $wpdb->insert(MKT_DB::table('offers'), [
+                $inserted = $wpdb->insert(MKT_DB::table('offers'), [
                     'public_id' => $public_id,
-                    'listing_id' => (int) $listing['id'],
+                    'listing_id' => (int) $fresh_listing['id'],
                     'buyer_user_id' => $buyer_id,
-                    'seller_user_id' => $seller_id,
+                    'seller_user_id' => $fresh_seller_id,
                     'created_by' => $buyer_id,
                     'amount' => $amount,
                     'currency' => $currency,
@@ -57,11 +80,14 @@ final class MKT_Commerce {
                     'updated_at' => $now,
                     'expires_at' => gmdate('Y-m-d H:i:s', time() + $expires_hours * HOUR_IN_SECONDS),
                 ]);
+                if (!$inserted) {
+                    return new WP_Error('mkt_offer_failed', __('The offer could not be created.', 'marketplace'), ['status' => 409]);
+                }
                 $offer = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE id=%d', $wpdb->insert_id), ARRAY_A);
-                MKT_Audit::record('offer_created', 'offer', $public_id, ['listing_public_id' => $listing['public_id'], 'amount' => $amount, 'currency' => $currency]);
+                MKT_Audit::record('offer_created', 'offer', $public_id, ['listing_public_id' => $fresh_listing['public_id'], 'amount' => $amount, 'currency' => $currency]);
                 MKT_Events::enqueue('MarketplaceOfferCreated.v1', 'offer', $public_id, [
-                    'listing_public_id' => $listing['public_id'],
-                    'notify_user_ids' => [$seller_id],
+                    'listing_public_id' => $fresh_listing['public_id'],
+                    'notify_user_ids' => [$fresh_seller_id],
                     'safe_summary' => __('A buyer submitted an offer.', 'marketplace'),
                     'url' => home_url('/marketplace/dashboard/?tab=offers'),
                 ], 'participants');
@@ -115,6 +141,25 @@ final class MKT_Commerce {
                         }
                         return self::offer_dto($idempotent);
                     }
+
+                    // Counter-offers are new commerce commitments. Re-lock the listing
+                    // and revalidate seller eligibility rather than trusting the stale
+                    // parent-offer snapshot.
+                    $fresh_listing = $wpdb->get_row($wpdb->prepare(
+                        'SELECT l.*,s.user_id AS seller_user_id,s.status AS seller_status FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d FOR UPDATE',
+                        (int) $offer['listing_id']
+                    ), ARRAY_A);
+                    if (!$fresh_listing || (string) $fresh_listing['status'] !== 'active' || (string) $fresh_listing['availability'] === 'unavailable' || (string) $fresh_listing['seller_status'] !== 'approved') {
+                        return new WP_Error('mkt_listing_unavailable', __('The listing is no longer available for a counter-offer.', 'marketplace'), ['status' => 409]);
+                    }
+                    $seller_eligibility = MKT_Auth::seller_eligibility((int) $fresh_listing['seller_user_id']);
+                    if (empty($seller_eligibility['eligible'])) {
+                        return new WP_Error('mkt_listing_unavailable', __('The seller is no longer eligible to receive a counter-offer.', 'marketplace'), ['status' => 409]);
+                    }
+                    if ((string) $fresh_listing['currency'] !== (string) $offer['currency']) {
+                        return new WP_Error('mkt_invalid_counter', __('The listing currency changed. Reload before countering.', 'marketplace'), ['status' => 409]);
+                    }
+
                     $amount = round((float) ($input['amount'] ?? 0), 2);
                     if ($amount <= 0) {
                         return new WP_Error('mkt_invalid_counter', __('Counter-offer amount is invalid.', 'marketplace'), ['status' => 422]);
