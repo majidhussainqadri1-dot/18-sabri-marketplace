@@ -154,8 +154,11 @@ final class MKT_Events {
                 if ($updated !== 1) {
                     return new WP_Error('mkt_seller_reconciliation_conflict', 'Seller state changed during suspension reconciliation.');
                 }
-                $wpdb->query($wpdb->prepare("UPDATE " . MKT_DB::table('listings') . " SET status='paused',updated_at=%s,version=version+1 WHERE seller_id=%d AND status='active'", MKT_DB::now(), (int) $seller['id']));
-                MKT_Audit::record('external_seller_suspended', 'seller', (string) $seller['public_id'], ['source_event_id' => (string) ($event['event_id'] ?? '')], 'success', '', 'identity_reconciliation');
+                $paused = $wpdb->query($wpdb->prepare("UPDATE " . MKT_DB::table('listings') . " SET status='paused',updated_at=%s,version=version+1 WHERE seller_id=%d AND status='active'", MKT_DB::now(), (int) $seller['id']));
+                if ($paused === false) {
+                    return new WP_Error('mkt_seller_listing_pause_failed', 'Active seller listings could not be paused during suspension reconciliation.');
+                }
+                MKT_Audit::record('external_seller_suspended', 'seller', (string) $seller['public_id'], ['source_event_id' => (string) ($event['event_id'] ?? ''), 'paused_listings' => (int) $paused], 'success', '', 'identity_reconciliation');
                 return true;
             }
             if ($type === 'PaymentStatusChanged.v1') {
@@ -185,8 +188,12 @@ final class MKT_Events {
                 if ($context_listing_id === '') {
                     return true;
                 }
+                $listing_exists = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('listings') . ' WHERE public_id=%s', $context_listing_id)) === 1;
+                if (!$listing_exists) {
+                    return new WP_Error('mkt_event_listing_not_found', 'Communication report references an unknown marketplace listing.');
+                }
                 $public_id = MKT_DB::uuid();
-                $wpdb->insert(MKT_DB::table('reports'), [
+                $inserted = $wpdb->insert(MKT_DB::table('reports'), [
                     'public_id' => $public_id,
                     'reporter_user_id' => 0,
                     'target_type' => 'listing',
@@ -199,6 +206,9 @@ final class MKT_Events {
                     'created_at' => MKT_DB::now(),
                     'updated_at' => MKT_DB::now(),
                 ]);
+                if (!$inserted) {
+                    return new WP_Error('mkt_communication_report_write_failed', 'Communication report could not be persisted.');
+                }
                 MKT_Audit::record('external_communication_report_received', 'report', $public_id, ['listing_public_id' => $context_listing_id], 'success', '', 'marketplace_safety');
                 return true;
             }
