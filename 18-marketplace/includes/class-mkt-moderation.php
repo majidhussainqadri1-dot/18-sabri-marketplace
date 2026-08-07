@@ -15,7 +15,9 @@ final class MKT_Moderation {
         $target = self::validate_report_target($target_type, $target_public_id, $user_id);
         if (is_wp_error($target)) return $target;
 
-        $allowed_reasons = ['illegal','fraud','counterfeit','unsafe','false_cure_claim','privacy','harassment','minor_safety','misleading_price','other'];
+        // Keep the canonical moderation API aligned with the complete Top-20/report
+        // taxonomy exposed by the current REST completion layer and public UI.
+        $allowed_reasons = ['illegal','harm','fraud','scam','counterfeit','unsafe','unsafe_claim','false_claim','false_cure_claim','privacy','harassment','abuse','impersonation','copyright','minor_safety','child_safety','non_delivery','misleading_price','other'];
         if (!in_array($reason, $allowed_reasons, true)) $reason = 'other';
         $details = wp_kses_post((string) ($input['details'] ?? ''));
         if (mb_strlen(wp_strip_all_tags($details)) < 10) {
@@ -45,6 +47,7 @@ final class MKT_Moderation {
             'safe_summary' => __('A marketplace safety report was submitted.', 'marketplace'),
             'target_type' => $target_type,
             'target_public_id' => $target_public_id,
+            'reason_taxonomy' => $reason,
         ], 'restricted');
         return self::report_dto($wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE id=%d', $wpdb->insert_id), ARRAY_A));
     }
@@ -108,7 +111,13 @@ final class MKT_Moderation {
         if ($to === 'restricted' && $row['target_type'] === 'listing') {
             $listing = MKT_Listings::get((string) $row['target_public_id'], true);
             if ($listing && MKT_State_Machines::can('listing', (string) $listing['status'], 'removed')) {
-                MKT_Listings::transition((string) $listing['public_id'], 'removed', $actor_id, (int) $listing['version'], (string) ($input['decision_code'] ?? 'safety_report'), (string) ($input['decision_note'] ?? ''));
+                $listing_result = MKT_Listings::transition((string) $listing['public_id'], 'removed', $actor_id, (int) $listing['version'], (string) ($input['decision_code'] ?? 'safety_report'), (string) ($input['decision_note'] ?? ''));
+                if (is_wp_error($listing_result)) {
+                    // Official REST/admin entry points wrap this transition in the owner
+                    // transaction; surfacing the error makes the report + listing change
+                    // roll back together instead of committing a false restricted state.
+                    return $listing_result;
+                }
             }
         }
         MKT_Audit::record($is_reporter_appeal ? 'report_appealed' : 'report_transitioned', 'report', $public_id, ['from' => $row['status'], 'to' => $to, 'decision_code' => $changes['decision_code']], 'success', '', 'marketplace_safety');
