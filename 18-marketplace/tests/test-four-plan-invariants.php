@@ -1,0 +1,56 @@
+<?php
+require __DIR__ . '/bootstrap.php';
+$root = dirname(__DIR__);
+$auth = file_get_contents($root . '/includes/class-mkt-auth.php');
+$contracts = file_get_contents($root . '/includes/class-mkt-contracts.php');
+$events = file_get_contents($root . '/includes/class-mkt-events.php');
+$idem = file_get_contents($root . '/includes/class-mkt-idempotency.php');
+$listings = file_get_contents($root . '/includes/class-mkt-listings.php');
+$commerce = file_get_contents($root . '/includes/class-mkt-commerce.php');
+$db = file_get_contents($root . '/includes/class-mkt-db.php');
+$admin = file_get_contents($root . '/includes/class-mkt-admin.php');
+$integration = file_get_contents($root . '/includes/class-mkt-integrations.php');
+$governance = file_get_contents($root . '/includes/class-mkt-governance.php');
+$completion = file_get_contents($root . '/includes/class-mkt-plan-completion.php');
+$finalization = file_get_contents($root . '/includes/class-mkt-finalization.php');
+$release = file_get_contents($root . '/includes/class-mkt-release-gates.php');
+$maintenance = file_get_contents($root . '/includes/class-mkt-maintenance.php');
+$privacy = file_get_contents($root . '/includes/class-mkt-privacy.php');
+$css = file_get_contents($root . '/assets/css/marketplace.css');
+$listing_template = file_get_contents($root . '/templates/listing.php');
+$dashboard_template = file_get_contents($root . '/templates/dashboard.php');
+$sell_template = file_get_contents($root . '/templates/sell.php');
+
+assert_true(str_contains($auth, "!\$assertions['verified']"), 'Protected Marketplace actions require verified identity.');
+assert_true(str_contains($auth, "['blocked','high','critical']"), 'Protected actions fail closed on high-risk states.');
+assert_true(str_contains($integration, "array_key_exists('available', \$raw)") && str_contains($integration, "\$assertions['contract_mode'] = 'malformed'") && str_contains($integration, "\$assertions['available'] = false"), 'Identity contract preserves explicit unavailability and rejects malformed status.');
+assert_true(str_contains($commerce, "MKT_Auth::can('mkt_review_disputes'"), 'Dispute-reviewer deal access revalidates current identity state.');
+assert_true(str_contains($db, 'SELECT GET_LOCK') && str_contains($db, 'SELECT RELEASE_LOCK'), 'Upgrade concurrency uses an atomic connection-owned database lock.');
+assert_true(str_contains($db, 'LIMIT 200') && str_contains($db, 'LIMIT 500'), 'Legacy migration reads are bounded by keyset batches.');
+assert_true(str_contains($admin, "'promotions_enabled' => 0"), 'Paid/donor promotion control is not user-enableable.');
+assert_true(str_contains($admin, "MKT_Auth::can('mkt_manage_policies'"), 'Marketplace policy writes revalidate high-trust authorization.');
+assert_true(str_contains($contracts, "'access_tier' => 'single_free'") && str_contains($contracts, "'donation_advantage' => false") && str_contains($contracts, "'paid_ranking' => false"), 'Single-free-tier and non-privilege business laws are machine-readable.');
+assert_true(!str_contains($listings, "ORDER BY (l.featured_label<>''") && str_contains($listings, 'ORDER BY l.published_at DESC,l.id DESC'), 'Default native discovery cannot privilege a featured/donor/paid label.');
+assert_true(str_contains($idem, "expires_at=%s AND expires_at<=UTC_TIMESTAMP()") && str_contains($idem, "status='failed' AND request_hash=%s"), 'Stale/failed idempotency retry claims use compare-and-swap semantics.');
+assert_true(str_contains($events, 'OUTBOX_PROCESSING_LEASE_SECONDS') && str_contains($events, "status='processing' AND available_at<=UTC_TIMESTAMP()"), 'Outbox worker has a recoverable processing lease.');
+assert_true(str_contains($events, 'mkt_event_payload_conflict') && str_contains($events, "status='failed'"), 'External inbox rejects payload conflicts and can reclaim failed events.');
+assert_true(str_contains($maintenance, 'MKT_DB::transaction(function()') && str_contains($maintenance, 'MarketplaceSellerStatusChanged.v1'), 'Scheduled owner-state and outbox mutations are atomic.');
+
+assert_true(str_contains($governance, 'mkt_listing_evidence') && str_contains($governance, 'license_or_registration') && str_contains($governance, 'batch_number') && str_contains($governance, 'expiry_date'), 'CV-206 structured product evidence is implemented.');
+assert_true(str_contains($governance, 'mkt_recalls') && str_contains($governance, 'MarketplaceRecallActivated.v1') && str_contains($listing_template, 'Recall / takedown notice'), 'CV-210 recall/takedown and buyer-facing warning are implemented.');
+assert_true(str_contains($governance, 'mkt_retention_holds') && str_contains($governance, 'authority_reference') && str_contains($privacy, "has_active_hold('report'") && str_contains($privacy, "has_active_hold('dispute'"), 'Time-bounded legal/safety holds govern report/dispute retention and privacy erasure.');
+assert_true(str_contains($privacy, 'private const ERASE_BATCH = 100') && str_contains($privacy, "'done' => \$done"), 'Privacy erasure is paginated and reports completion honestly.');
+assert_true(str_contains($governance, 'seller_studio') && str_contains($dashboard_template, 'Seller Studio') && str_contains($dashboard_template, 'not paid-ranking'), 'CV-208 Seller Studio is operationally visible without ranking coercion.');
+assert_true(str_contains($finalization, "'availability','seller_status','rights','language','listing_type'") && str_contains($finalization, "['product','service','digital']") && str_contains($finalization, 'service_schedule'), 'Marketplace discovery exposes complete governed local facets.');
+assert_true(str_contains($completion, "'non_delivery'") && str_contains($completion, "'impersonation'") && str_contains($completion, "'child_safety'") && str_contains($listing_template, 'Non-delivery') && str_contains($listing_template, 'Impersonation') && str_contains($listing_template, 'Child safety'), 'Top-20 report taxonomy is enforced by the backend and exposed by the listing UI.');
+assert_true(str_contains($sell_template, 'data-mkt-evidence-form') && str_contains($sell_template, 'name="language"'), 'Seller UI exposes language and regulated evidence workflow.');
+assert_true(str_contains($release, "\$language==='und'") && str_contains($release, 'mkt_evidence_review_required') && str_contains($release, 'mkt_active_recall'), 'Publication gate cannot be bypassed by unknown language, missing evidence or active recall.');
+assert_true(str_contains($release, 'mkt_self_review_forbidden') && str_contains($release, 'evidence_rejected') && str_contains($release, "'status'=>'paused'"), 'Regulated evidence cannot be self-reviewed and rejection atomically pauses an active listing.');
+assert_true(str_contains($release, 'X-Robots-Tag: noindex, nofollow, noarchive') && str_contains($release, 'Cache-Control: private, no-store'), 'Recalled safety pages are noindex and no-store.');
+assert_true(str_contains($listing_template, 'if (!$listing && $recall)') && str_contains($listing_template, 'Offers and seller-contact actions are disabled'), 'Active recalled listings retain a narrowly scoped public safety notice while commerce/contact is disabled.');
+assert_true(str_contains($finalization, 'admin_marketplace_moderation') && str_contains($finalization, 'MKT_DB::transaction'), 'Admin moderation revalidates File 00 and commits owner-state plus outbox atomically.');
+assert_true(str_contains($css, 'var(--sabri-color-primary,#147a43)'), 'Marketplace consumes File 25 primary design token with a green fallback.');
+assert_true(!str_contains($completion, 'true|WP_Error') && !str_contains($release, 'true|WP_Error'), 'Supported PHP 8.1 source does not use the PHP 8.2 standalone true union type.');
+assert_true(!is_dir(dirname($root) . '/bundles') && !file_exists(dirname($root) . '/reconstruct-source.sh'), 'Canonical source is directly reviewable; no base64 reconstruction is required.');
+
+fwrite(STDOUT, "Four-plan invariant suite complete.\n");
