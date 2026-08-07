@@ -3,7 +3,8 @@
 **Repository:** `majidhussainqadri1-dot/18-sabri-marketplace`  
 **Branch:** `feat/file-18-marketplace-plan-complete-2.0.0`  
 **Extended-audit baseline:** `3b8ff64edd4e1a510e2d8c198a004b2928f5447e`  
-**Final reviewed head before this report commit:** `2e1e89db1fe655a37043dfe32d1bf223d83a842d`  
+**Final reviewed source head:** `2e1e89db1fe655a37043dfe32d1bf223d83a842d`  
+**Audit-report verification commit:** `1278b191e3b35514f3cecb5c55a7551572fb3c50`  
 **Runtime / Schema / Contract:** `2.1.0 / 2.1.0 / 1.2.0`  
 **Date:** 2026-08-07 (PKT)
 
@@ -35,7 +36,10 @@ A round is marked **DEFECT** only when the extended audit found a concrete imple
 | Rounds in which no new defect was found | **30** |
 | Defect-bearing rounds corrected and re-reviewed | **10 / 10** |
 | Known unresolved code/plan defects after round 40 | **0** |
-| Exact-head GitHub Actions result before this report | **PASS — run 31202157464** |
+| Completed audit-report commit verification | **PASS — GitHub Actions run 31202372985** |
+| PHP matrix | **8.1 PASS / 8.3 PASS** |
+| Deterministic release artifact | `file18-marketplace-2.1.0-rc3` — artifact `9003336175` |
+| Installable ZIP SHA-256 | `17a9d7dc35137341fe14cfc84ac78987da74f9e4ee585e44bc0f673552b4b58f` |
 
 ## Forty-round register
 
@@ -59,7 +63,7 @@ A round is marked **DEFECT** only when the extended audit found a concrete imple
 | 16 | Structured regulated-product evidence (manufacturer/license/batch/expiry/claims/source) | **CLEAN** | Evidence domain and publication gate remained present and fail-closed. |
 | 17 | Evidence reviewer separation / seller self-review prohibition | **CLEAN** | Self-review guard remained enforced; rejected evidence pauses active listing. |
 | 18 | Recall/takedown lifecycle and public safety notice | **CLEAN** | Active recall keeps safety notice reachable while commerce/contact are disabled. |
-| 19 | Recall cache/search/SEO safety (`noindex`, `noarchive`, private/no-store where required) | **CLEAN** | Existing release-gate response controls remained intact. |
+| 19 | Recall cache/search/SEO safety (`noindex`, `noarchive`, private/no-store` where required) | **CLEAN** | Existing release-gate response controls remained intact. |
 | 20 | Seller Studio usefulness without ranking coercion | **CLEAN** | Studio remains operational/analytics UI only and explicitly non-paid-ranking. |
 | 21 | Listing facets: availability, seller state, rights, language and listing type | **CLEAN** | Governed local facets remained present; no canonical-owner takeover. |
 | 22 | Product/service/digital type plus service scheduling | **CLEAN** | Type rules and service scheduling remained present. |
@@ -80,11 +84,11 @@ A round is marked **DEFECT** only when the extended audit found a concrete imple
 | 37 | Public/private/noindex/no-cache route boundaries and record-existence leakage | **CLEAN** | Private/dashboard/deal surfaces and recalled/sensitive states retain constrained caching/indexing behavior. |
 | 38 | PHP 8.1/8.3 language compatibility, JS syntax and direct-source reviewability | **CLEAN** | Previous PHP 8.1 `true`-union defect was already corrected; exact-head matrix passed both PHP versions. |
 | 39 | Deterministic package build, archive integrity and direct-source supply-chain gate | **CLEAN** | Workflow double-build/cmp/unzip/checksum gate passed; no encoded reconstruction source accepted. |
-| 40 | Fresh full-regression / four-plan adversarial exact-head verification | **CLEAN** | GitHub Actions run `31202157464` completed successfully on PHP 8.1 and 8.3 for head `2e1e89db1fe655a37043dfe32d1bf223d83a842d`. |
+| 40 | Fresh full-regression / four-plan adversarial verification | **CLEAN** | Completed forty-round report commit `1278b191e3b35514f3cecb5c55a7551572fb3c50` passed GitHub Actions run `31202372985`: PHP 8.1/8.3, static, state-machine, contracts, architecture, adversarial, four-plan invariants and deterministic build. |
 
 ## Correction summary
 
-The ten defect-bearing rounds were not deferred. Each source defect was corrected before the audit advanced to its final clean state, and a paired or existing regression/invariant suite was used to re-check the repaired control. The final exact-head automated gate was green before this report was committed.
+The ten defect-bearing rounds were not deferred. Each source defect was corrected before the audit advanced to its final clean state, and a paired or existing regression/invariant suite was used to re-check the repaired control. The completed forty-round report commit was then verified by GitHub Actions run `31202372985`, which passed on both PHP 8.1 and PHP 8.3 and produced deterministic RC3 artifact `9003336175` with installable ZIP SHA-256 `17a9d7dc35137341fe14cfc84ac78987da74f9e4ee585e44bc0f673552b4b58f`.
 
 ## Truthful completion boundary
 
