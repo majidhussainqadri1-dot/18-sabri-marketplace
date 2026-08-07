@@ -36,7 +36,28 @@ jobs:
             echo 'Encoded source bundle detected; canonical source must be directly reviewable.' >&2
             exit 1
           fi
-      - name: Static, contract and four-plan QA
+      - name: PHP syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find 18-marketplace -type f -name '*.php' -print0)
+      - name: JavaScript syntax
+        run: |
+          node --check 18-marketplace/assets/js/marketplace.js
+          node --check 18-marketplace/assets/js/marketplace-completion.js
+      - name: CSS structural gate
+        run: python3 -c "import pathlib; s=pathlib.Path('18-marketplace/assets/css/marketplace.css').read_text(); assert s.count('{')==s.count('}')"
+      - name: State-machine tests
+        run: php 18-marketplace/tests/test-state-machines.php
+      - name: Contract tests
+        run: php 18-marketplace/tests/test-contracts.php
+      - name: Source-architecture tests
+        run: php 18-marketplace/tests/test-source-architecture.php
+      - name: Adversarial invariant tests
+        run: php 18-marketplace/tests/test-review-invariants.php
+      - name: Four-plan invariant tests
+        run: php 18-marketplace/tests/test-four-plan-invariants.php
+      - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Deterministic release build
         shell: bash
