@@ -119,6 +119,15 @@ final class MKT_Integrations {
         if ($actor_id <= 0 || $other_user_id <= 0 || $actor_id === $other_user_id) {
             return new WP_Error('mkt_invalid_conversation_participants', __('Invalid conversation participants.', 'marketplace'), ['status' => 400]);
         }
+
+        // File 17 owns the conversation, but Marketplace owns seller eligibility.
+        // Recheck the seller at the handoff boundary so lagging projections/events
+        // cannot start new commerce contact after suspension or verification loss.
+        $seller = MKT_Auth::seller_eligibility($other_user_id);
+        if (empty($seller['eligible'])) {
+            return new WP_Error('mkt_seller_contact_unavailable', __('The seller is not currently eligible for marketplace contact.', 'marketplace'), ['status' => 409]);
+        }
+
         $context = [
             'type' => 'marketplace_listing',
             'provider' => 'file-18-marketplace',
@@ -142,9 +151,19 @@ final class MKT_Integrations {
         if (!is_array($result) || (empty($result['conversation_id']) && empty($result['public_id'])) || empty($result['url'])) {
             return new WP_Error('mkt_communication_unavailable', __('Product-linked conversation is temporarily unavailable.', 'marketplace'), ['status' => 503]);
         }
+
+        // File 17 is an internal platform owner. A provider result may never turn the
+        // Marketplace action into an open redirect or external deep-link handoff.
+        $url = esc_url_raw((string) $result['url']);
+        $home_host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+        $result_host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
+        if ($url === '' || $home_host === '' || $result_host === '' || !hash_equals($home_host, $result_host)) {
+            return new WP_Error('mkt_communication_url_invalid', __('Product-linked conversation returned an invalid destination.', 'marketplace'), ['status' => 503]);
+        }
+
         return [
             'conversation_id' => sanitize_text_field((string) ($result['conversation_id'] ?? $result['public_id'])),
-            'url' => esc_url_raw((string) $result['url']),
+            'url' => $url,
         ];
     }
 
