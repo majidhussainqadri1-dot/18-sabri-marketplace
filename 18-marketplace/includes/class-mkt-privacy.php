@@ -3,6 +3,7 @@ defined('ABSPATH') || exit;
 
 final class MKT_Privacy {
     private const EXPORT_BATCH = 100;
+    private const ERASE_BATCH = 100;
 
     public static function init(): void {
         add_filter('wp_privacy_personal_data_exporters', [self::class, 'exporters']);
@@ -63,7 +64,6 @@ final class MKT_Privacy {
             if (count($rows) === self::EXPORT_BATCH) $done = false;
             foreach ($rows as $row) $data[] = self::group('listing-evidence', (string) $row['listing_public_id'], $row, []);
         }
-
         return ['data' => $data, 'done' => $done];
     }
 
@@ -71,40 +71,68 @@ final class MKT_Privacy {
         $user = get_user_by('email', $email_address);
         if (!$user) return ['items_removed' => false, 'items_retained' => false, 'messages' => [], 'done' => true];
         $user_id = (int) $user->ID;
+        $page = max(1, $page);
+        $offset = ($page - 1) * self::ERASE_BATCH;
         global $wpdb;
-        $retained = false; $removed = false; $messages = [];
+        $retained = false;
+        $removed = false;
+        $messages = [];
 
-        $seller = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('sellers') . ' WHERE user_id=%d', $user_id), ARRAY_A);
-        if ($seller) {
-            $wpdb->update(MKT_DB::table('sellers'), ['store_name' => 'Deleted seller', 'public_contact_modes' => '[]', 'country' => '', 'region' => '', 'city' => '', 'eligibility_snapshot' => '{}', 'updated_at' => MKT_DB::now()], ['id' => (int) $seller['id']]);
-            $removed = true;
+        if ($page === 1) {
+            $seller = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('sellers') . ' WHERE user_id=%d', $user_id), ARRAY_A);
+            if ($seller) {
+                $wpdb->update(MKT_DB::table('sellers'), [
+                    'store_name' => 'Deleted seller', 'public_contact_modes' => '[]', 'country' => '', 'region' => '', 'city' => '',
+                    'eligibility_snapshot' => '{}', 'updated_at' => MKT_DB::now(),
+                ], ['id' => (int) $seller['id']]);
+                $removed = true;
+            }
+            $deleted_saves = $wpdb->delete(MKT_DB::table('saves'), ['user_id' => $user_id]);
+            if ($deleted_saves) $removed = true;
         }
-        $wpdb->delete(MKT_DB::table('saves'), ['user_id' => $user_id]);
 
-        $reports = $wpdb->get_results($wpdb->prepare('SELECT public_id FROM ' . MKT_DB::table('reports') . ' WHERE reporter_user_id=%d ORDER BY id ASC LIMIT 500', $user_id), ARRAY_A);
+        $reports = $wpdb->get_results($wpdb->prepare(
+            'SELECT public_id FROM ' . MKT_DB::table('reports') . ' WHERE reporter_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d',
+            $user_id, self::ERASE_BATCH, $offset
+        ), ARRAY_A);
         foreach ($reports as $report) {
             $public_id = (string) $report['public_id'];
             if (class_exists('MKT_Governance') && MKT_Governance::has_active_hold('report', $public_id)) {
                 $retained = true;
                 continue;
             }
-            $wpdb->update(MKT_DB::table('reports'), ['details' => '[Erased by privacy request]', 'evidence_refs' => '[]'], ['public_id' => $public_id, 'reporter_user_id' => $user_id]);
-            $removed = true;
+            $changed = $wpdb->update(MKT_DB::table('reports'), ['details' => '[Erased by privacy request]', 'evidence_refs' => '[]'], ['public_id' => $public_id, 'reporter_user_id' => $user_id]);
+            if ($changed !== false) $removed = true;
         }
 
-        $deals = $wpdb->get_results($wpdb->prepare('SELECT public_id FROM ' . MKT_DB::table('deals') . ' WHERE buyer_user_id=%d OR seller_user_id=%d ORDER BY id ASC LIMIT 500', $user_id, $user_id), ARRAY_A);
+        $disputes = $wpdb->get_results($wpdb->prepare(
+            'SELECT x.public_id FROM ' . MKT_DB::table('disputes') . ' x INNER JOIN ' . MKT_DB::table('deals') . ' d ON d.id=x.deal_id WHERE d.buyer_user_id=%d OR d.seller_user_id=%d OR x.opened_by=%d ORDER BY x.id ASC LIMIT %d OFFSET %d',
+            $user_id, $user_id, $user_id, self::ERASE_BATCH, $offset
+        ), ARRAY_A);
+        foreach ($disputes as $dispute) {
+            $public_id = (string) $dispute['public_id'];
+            if (class_exists('MKT_Governance') && MKT_Governance::has_active_hold('dispute', $public_id)) {
+                $retained = true;
+                continue;
+            }
+            $changed = $wpdb->update(MKT_DB::table('disputes'), [
+                'statement' => '[Erased by privacy request]', 'evidence_refs' => '[]', 'access_grants' => '[]',
+            ], ['public_id' => $public_id]);
+            if ($changed !== false) $removed = true;
+        }
+
         $offers = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('offers') . ' WHERE buyer_user_id=%d OR seller_user_id=%d', $user_id, $user_id));
-        if ($offers || $deals) {
+        $deals = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('deals') . ' WHERE buyer_user_id=%d OR seller_user_id=%d', $user_id, $user_id));
+        if ($offers || $deals || $disputes) {
             $retained = true;
-            $messages[] = __('Structured offer, deal and dispute records—including participant account IDs where legally or operationally required—were retained under the marketplace transaction/dispute policy; narrative evidence and direct contact data were minimized where permitted. Active legal or safety holds are disclosed as a reason for deferred erasure when applicable.', 'marketplace');
-        }
-        foreach ($deals as $deal) {
-            $deal_id = (string) $deal['public_id'];
-            if (class_exists('MKT_Governance') && MKT_Governance::has_active_hold('deal', $deal_id)) $retained = true;
+            $messages[] = __('Structured offer, deal and dispute lifecycle records—including participant account IDs where legally or operationally required—are retained under the marketplace transaction/dispute policy. Narrative report/dispute evidence is minimized in bounded batches when no active legal or safety hold requires preservation.', 'marketplace');
         }
 
-        MKT_Audit::record('privacy_erasure_processed', 'user', (string) $user_id, ['transaction_records_retained' => $retained], 'success', '', 'privacy_request');
-        return ['items_removed' => $removed, 'items_retained' => $retained, 'messages' => $messages, 'done' => true];
+        $done = count($reports) < self::ERASE_BATCH && count($disputes) < self::ERASE_BATCH;
+        if ($done) {
+            MKT_Audit::record('privacy_erasure_processed', 'user', (string) $user_id, ['transaction_records_retained' => $retained, 'pages_processed' => $page], 'success', '', 'privacy_request');
+        }
+        return ['items_removed' => $removed, 'items_retained' => $retained, 'messages' => array_values(array_unique($messages)), 'done' => $done];
     }
 
     private static function group(string $type, string $id, array $row, array $exclude): array {
