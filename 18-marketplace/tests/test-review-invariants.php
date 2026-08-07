@@ -29,5 +29,6 @@ assert_true(str_contains($admin, "current_user_can('mkt_moderate')") && str_cont
 assert_true(str_contains($privacy, "'dispute' => \$wpdb->get_results") && str_contains($privacy, "MKT_DB::table('disputes')") && str_contains($privacy, "'group_id' => 'mkt-' . \$type"), 'Privacy export includes participant disputes through the generic bounded exporter.');
 assert_true(str_contains($privacy, 'private const EXPORT_BATCH = 100') && str_contains($privacy, 'private const ERASE_BATCH = 100'), 'Privacy export and erasure are bounded.');
 assert_true(str_contains($audit, 'GET_LOCK') && str_contains($audit, 'verify_chain'), 'Audit chain has concurrency control and verification.');
+assert_true(str_contains($audit, 'if (!$inserted)') && str_contains($audit, 'audit evidence could not be persisted'), 'Required audit evidence cannot fail silently.');
 assert_true(!preg_match('/\bmkt_(conversations?|messages?|calls?|wallets?|escrows?|payouts?)\b/i', $db), 'No parallel communication or money canonical table exists.');
 fwrite(STDOUT, "Adversarial invariant suite complete.\n");
