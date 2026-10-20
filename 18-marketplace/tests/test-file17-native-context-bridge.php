@@ -55,8 +55,11 @@ function rest_do_request(WP_REST_Request $r):WP_REST_Response {
     }
     return new WP_REST_Response([],404);
 }
+function sun_ingest_domain_event(array $event): array {return ['status'=>'processed'];}
+function sun_register_notification_producer($key,array $config): bool {return true;}
 require dirname(__DIR__).'/includes/class-mkt-integrations.php';
 MKT_Integrations::boot();
+assert_true(MKT_Integrations::status()['notifications']['available']===true, 'Native File19 SUN producer/ingest functions register notification availability.');
 assert_true(has_filter('sn_network_context_authorize')!==false,'File 18 provides File17 context owner authorization.');
 assert_true(has_filter('sn_network_context_projection')!==false,'File 18 provides File17 public-safe context projection.');
 assert_true(MKT_Integrations::communication_status()['available']===true,'Native File17 REST bridge is recognized as available.');
