@@ -305,6 +305,11 @@ final class MKT_Commerce {
         if (!$inserted) {
             return new WP_Error('mkt_deal_create_failed', __('The deal could not be created.', 'marketplace'), ['status' => 500]);
         }
+        // Capture the deals PK before subsequent audit/outbox INSERTs overwrite insert_id.
+        $new_deal_id = (int) $wpdb->insert_id;
+        if ($new_deal_id <= 0) {
+            return new WP_Error('mkt_deal_create_failed', __('The deal identifier could not be confirmed.', 'marketplace'), ['status' => 500]);
+        }
         if ((float) $listing['quantity'] <= 1) {
             $listing_updated = $wpdb->update(MKT_DB::table('listings'), [
                 'quantity' => 0,
@@ -330,7 +335,11 @@ final class MKT_Commerce {
             'safe_summary' => __('A marketplace deal was accepted.', 'marketplace'),
             'url' => home_url('/marketplace/deal/' . $public_id . '/'),
         ], 'participants');
-        return self::deal_dto($wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE id=%d', $wpdb->insert_id), ARRAY_A));
+        $committed_deal = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE id=%d', $new_deal_id), ARRAY_A);
+        if (!$committed_deal || (string) $committed_deal['public_id'] !== $public_id) {
+            return new WP_Error('mkt_deal_readback_failed', __('The new deal could not be verified.', 'marketplace'), ['status' => 500]);
+        }
+        return self::deal_dto($committed_deal);
     }
 
     public static function transition_deal(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {

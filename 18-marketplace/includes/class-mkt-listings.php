@@ -447,7 +447,17 @@ final class MKT_Listings {
             array_push($params, $like, $like, $like);
         }
         if ($cursor > 0) {
-            $where[] = 'l.id<%d'; $params[] = $cursor;
+            // The cursor must follow the same composite ordering as the result set.
+            // An id-only comparison skips listings published later with an older id.
+            $anchor = $wpdb->get_row($wpdb->prepare(
+                'SELECT published_at FROM ' . MKT_DB::table('listings') . ' WHERE id=%d',
+                $cursor
+            ), ARRAY_A);
+            if (!$anchor || empty($anchor['published_at'])) {
+                return ['items' => [], 'next_cursor' => null, 'has_more' => false, 'error' => 'cursor_expired'];
+            }
+            $where[] = '(l.published_at < %s OR (l.published_at = %s AND l.id < %d))';
+            array_push($params, $anchor['published_at'], $anchor['published_at'], $cursor);
         }
         $sql = 'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id';
         if ($where) {

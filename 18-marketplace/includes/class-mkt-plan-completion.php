@@ -198,7 +198,7 @@ final class MKT_Plan_Completion {
     }
 
     private static function mutate_atomic(string $bucket,WP_REST_Request $request,array $data,callable $callback) {
-        $authorization=(string)($_SERVER['HTTP_AUTHORIZATION'] ?? ''); $app_auth=$authorization!=='' || !empty($_SERVER['PHP_AUTH_USER']);
+        $app_auth=did_action('application_password_did_authenticate') > 0;
         if (!$app_auth && !wp_verify_nonce((string)($_SERVER['HTTP_X_WP_NONCE'] ?? ''),'wp_rest')) return new WP_Error('mkt_invalid_nonce',__('Security token validation failed.','marketplace'),['status'=>403]);
         $rate=MKT_Rate_Limiter::check($bucket); if (is_wp_error($rate)) return $rate;
         $key=sanitize_text_field((string)($request->get_header('Idempotency-Key') ?: ($data['idempotency_key'] ?? ''))); $scope=sanitize_key($bucket.'_'.strtolower($request->get_method()).'_'.trim($request->get_route(),'/'));

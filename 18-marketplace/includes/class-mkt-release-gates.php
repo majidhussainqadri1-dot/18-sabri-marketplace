@@ -167,8 +167,7 @@ final class MKT_Release_Gates {
     }
 
     private static function validate_mutation_request(WP_REST_Request $request): bool|WP_Error {
-        $authorization=(string)($_SERVER['HTTP_AUTHORIZATION'] ?? '');
-        if ($authorization!=='' || !empty($_SERVER['PHP_AUTH_USER'])) return true;
+        if (did_action('application_password_did_authenticate') > 0) return true;
         $nonce=(string)$request->get_header('X-WP-Nonce');
         if ($nonce==='' || !wp_verify_nonce($nonce,'wp_rest')) return new WP_Error('mkt_invalid_nonce',__('The security token is missing or expired.','marketplace'),['status'=>403]);
         return true;

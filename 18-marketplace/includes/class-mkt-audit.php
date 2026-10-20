@@ -12,12 +12,16 @@ final class MKT_Audit {
         $table = MKT_DB::table('audit');
         $lock_name = $wpdb->prefix . 'mkt_audit_chain';
         $locked = (int) $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s,3)', $lock_name)) === 1;
-        $previous = $locked ? (string) $wpdb->get_var("SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1") : 'LOCK_UNAVAILABLE';
+        if (!$locked) {
+            // A chain that cannot be serialized is not valid audit evidence.
+            // Abort the governed mutation instead of committing a known gap.
+            throw new RuntimeException('Marketplace audit chain lock could not be acquired.');
+        }
+        $previous = (string) $wpdb->get_var("SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1");
         $trace_id = self::trace_id();
         $created_at = MKT_DB::now();
         $actor = get_current_user_id();
         $safe_details = self::sanitize_details($details);
-        if (!$locked) $safe_details['audit_chain_lock_gap'] = true;
         $payload = wp_json_encode([$previous,$trace_id,$actor,sanitize_key($action),sanitize_key($object_type),sanitize_text_field($object_public_id),sanitize_text_field($purpose),sanitize_key($outcome),sanitize_key($reason_code),$safe_details,$created_at]);
         $entry_hash = hash_hmac('sha256', (string) $payload, wp_salt('auth'));
         $inserted = $wpdb->insert($table, [
@@ -35,7 +39,7 @@ final class MKT_Audit {
             'entry_hash' => $entry_hash,
             'created_at' => $created_at,
         ]);
-        if ($locked) $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock_name));
+        $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock_name));
         if (!$inserted) {
             // Audit is part of the governed owner transaction. A silent audit-write
             // loss would let a state mutation commit without its required evidence.

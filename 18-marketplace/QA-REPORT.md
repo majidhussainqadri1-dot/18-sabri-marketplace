@@ -1,29 +1,23 @@
-# File 18 — Automated QA Report
+# File 18 — Corrective QA Report
 
-**Candidate:** Sabri Marketplace 2.0.0-RC1  
-**Date:** 7 August 2026
+**Date:** 20 October 2026  
+**Candidate:** Sabri Marketplace 2.1.0-RC4  
+**Status:** Fresh correction/source regression; staging and production validation still required.
 
-## Automated result
+## Reviewed and corrected
 
-**PASS — zero known failures in the packaged static/contract suite.**
+The new forty-scope source review found six control domains with source defects and additionally hardened failed transaction START/COMMIT return handling. Seven corrective findings cover: composite listing pagination, four internal REST nonce exceptions, transactional external inbox acknowledgement, explicit event delivery acknowledgement, audit-chain lock failure, and safe DB transaction boundaries.
 
-The suite validates:
+Regression enforcement: `tests/test-october-40-scope-regressions.php` runs within `qa-static.sh` and on both PHP 8.1 and PHP 8.3 in `.github/workflows/quality.yml`.
 
-- PHP syntax for all PHP files.
-- JavaScript syntax and CSS structural balance.
-- Listing, offer, deal, report and dispute state-machine laws.
-- Zero-commission and canonical-owner contracts.
-- No duplicate communication or money backend.
-- File 00, 17, 19, 20, 24 and 26 integration adapters.
-- Optimistic versions, listing-row locking and sold-out competing-offer closure.
-- General mutation idempotency and browser-generated keys.
-- Media-delete, report/dispute appeal and policy-version evidence.
-- Privacy exporter/eraser and participant dispute export.
-- Audit-chain locking and verification.
-- Outbox acknowledgement semantics.
-- Private route noindex/no-store, non-destructive uninstall and release identity.
-- Forbidden secret/private-key and dangerous-execution patterns.
+## Quality evidence boundary
 
-## Environment-independent limitations
+**Read GitHub Actions run for the final exact corrective branch HEAD before marking automated QA green.** The previously successful run on the earlier source commit does not establish that future documentation/source commits passed. Final RC4 ZIP, manifest and SHA-256 must derive from that same build.
 
-This report does not substitute for real WordPress/MySQL execution, Hostinger staging, actual File 00/17/19/20 contracts, browser/device/WCAG testing, load testing, malware/media-provider testing, backup restoration, rollback rehearsal or Founder acceptance.
+Static source checks do not verify WordPress/MySQL behavior, staging install/upgrade, compatibility with real File 00/17/19/20/24/25/26, File 19 notification receipt under explicit `mkt_event_acknowledged` semantics, privacy export/erase, browser/RTL, mobile accessibility, load, real backup restore, rollback or live operation.
+
+**Remaining acceptance:** Staging and Founder approval, followed by controlled production rollout and live re-test. No production-ready assertion.
+
+## Source and cross-file audit extension (20 October 2026)
+
+The new independent File 18 review compared F18-FR-001…020, F18-NFR-001…010, and ten central/companion ownership boundaries and detected six additional implementation gaps. All six have source corrections on the corrective Draft PR. `tests/test-october-40-scope-regressions.php` additionally verifies deal ID, migration/schema and event boundary changes; `tests/test-file19-notification-contract.php` exercises the canonical File 19 producer and envelope through isolated public-function fixtures. The CI workflow now runs 40 sequential aggregate source/regression passes per PHP matrix member, evidence subject to final HEAD confirmation. No browser/WordPress/MySQL/deployed parity evidence is implied.

@@ -263,9 +263,10 @@ final class MKT_REST {
     }
 
     private static function mutate(string $bucket, WP_REST_Request $request, array $data, callable $callback) {
-        $authorization = (string) ($_SERVER['HTTP_AUTHORIZATION'] ?? '');
-        $application_password_auth = $authorization !== '' || !empty($_SERVER['PHP_AUTH_USER']);
-        if (!$application_password_auth && !wp_verify_nonce((string) ($_SERVER['HTTP_X_WP_NONCE'] ?? ''), 'wp_rest')) {
+        // A supplied Authorization header is not proof of authentication.
+        // Follow the same verified Application Password boundary as REST pre-dispatch.
+        $application_password_auth = did_action('application_password_did_authenticate') > 0;
+        if (!$application_password_auth && !wp_verify_nonce((string) $request->get_header('X-WP-Nonce'), 'wp_rest')) {
             return new WP_Error('mkt_invalid_nonce', __('Security token validation failed.', 'marketplace'), ['status' => 403]);
         }
         $rate = MKT_Rate_Limiter::check($bucket);

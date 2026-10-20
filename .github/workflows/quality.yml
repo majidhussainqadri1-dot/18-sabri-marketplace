@@ -77,24 +77,42 @@ jobs:
       - name: Enforce four-plan invariant result
         shell: bash
         run: test "$(cat "$RUNNER_TEMP/four-plan-${{ matrix.php }}.exit")" = '0'
+      - name: October forty-scope corrective regressions
+        run: php 18-marketplace/tests/test-october-40-scope-regressions.php
+      - name: File 19 notification contract
+        run: php 18-marketplace/tests/test-file19-notification-contract.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
+      - name: Forty counted full static and regression passes
+        if: github.head_ref == 'fix/file18-40-scope-audit-2026-10-20'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for round in $(seq 1 40); do
+            if ! bash 18-marketplace/tests/qa-static.sh > "$RUNNER_TEMP/file18-review-${round}.log" 2>&1; then
+              echo "FILE18_REVIEW_ROUND=${round} RESULT=FAIL"
+              cat "$RUNNER_TEMP/file18-review-${round}.log"
+              exit 1
+            fi
+            printf 'FILE18_REVIEW_ROUND=%02d RESULT=PASS PHP=%s HEAD=%s\n' "$round" "${{ matrix.php }}" "${{ github.event.pull_request.head.sha }}"
+          done
+          echo 'FILE18_REVIEW_TOTAL=40 FILE18_REVIEW_PASSED=40 FILE18_REVIEW_FAILED=0'
       - name: Deterministic release build
         shell: bash
         run: |
           set -euo pipefail
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-a"
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
-          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC3.zip"
-          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC3.zip"
+          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC4.zip"
+          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC4.zip"
           cmp "$A" "$B"
           unzip -t "$A"
           HASH_A="$(sha256sum "$A" | awk '{print $1}')"
           HASH_B="$(sha256sum "$B" | awk '{print $1}')"
           test "$HASH_A" = "$HASH_B"
-          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC3.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC3.zip.sha256"
+          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC4.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC4.zip.sha256"
           {
-            echo '### File 18 Marketplace 2.1.0 RC3'
+            echo '### File 18 Marketplace 2.1.0 RC4'
             echo
             echo "SHA-256: \`$HASH_A\`"
             echo
@@ -103,9 +121,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.php == '8.3'
         with:
-          name: file18-marketplace-2.1.0-rc3
+          name: file18-marketplace-2.1.0-rc4
           path: |
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC3.zip
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC3.zip.sha256
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC4.zip
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC4.zip.sha256
           if-no-files-found: error
           retention-days: 14

@@ -236,9 +236,7 @@ final class MKT_Governance {
     }
 
     private static function application_password_auth(): bool {
-        return function_exists('wp_is_application_passwords_available')
-            && wp_is_application_passwords_available()
-            && !empty($_SERVER['PHP_AUTH_USER']);
+        return did_action('application_password_did_authenticate') > 0;
     }
 
     public static function save_evidence(string $listing_public_id, array $input, int $actor_id): array|WP_Error {
