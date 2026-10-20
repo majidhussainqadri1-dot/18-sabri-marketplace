@@ -65,8 +65,8 @@ $deal = substr($commerce, (int) strpos($commerce, 'private static function creat
 $dealInserted = strpos($deal, '$new_deal_id = (int) $wpdb->insert_id;');
 $dealAudit = strpos($deal, "MKT_Audit::record('deal_created'");
 assert_true($dealInserted !== false && $dealAudit !== false && $dealInserted < $dealAudit, 'Deal PK is captured before audit and outbox insert calls.');
-assert_true(str_contains($deal, "WHERE id=%d', $new_deal_id") && str_contains($deal, 'mkt_deal_readback_failed'), 'Deal readback uses the saved deal PK and rejects a missing or mismatched row.');
-assert_true(!str_contains($deal, "WHERE id=%d', $wpdb->insert_id"), 'Deal readback must not use a mutable last-insert id.');
+assert_true(str_contains($deal, "WHERE id=%d', $" . "new_deal_id") && str_contains($deal, 'mkt_deal_readback_failed'), 'Deal readback uses the saved deal PK and rejects a missing or mismatched row.');
+assert_true(!str_contains($deal, "WHERE id=%d', $" . "wpdb->insert_id"), 'Deal readback must not use a mutable last-insert id.');
 
 assert_true(str_contains($db, 'Marketplace legacy seller migration write failed'), 'Legacy seller migration refuses silent insert failure.');
 assert_true(str_contains($db, 'Marketplace legacy listing migration write failed'), 'Legacy listing migration refuses silent insert failure.');
