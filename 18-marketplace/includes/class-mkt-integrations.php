@@ -265,7 +265,13 @@ final class MKT_Integrations {
             'url' => MKT_Listings::url($listing),
             'label' => (string) $listing['title'],
             'status' => 'available',
-            'summary' => __('Marketplace listing', 'marketplace'),
+            // File 17 re-requests the source projection on each context read:
+            // price/status are current File 18 facts, never a stale chat snapshot.
+            'summary' => sprintf(
+                __('Current price: %1$s %2$s', 'marketplace'),
+                strtoupper(sanitize_key((string) $listing['currency'])),
+                number_format((float) $listing['price'], 2, '.', '')
+            ),
         ];
     }
 
