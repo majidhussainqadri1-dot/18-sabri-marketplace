@@ -269,7 +269,7 @@ final class MKT_Integrations {
             // price/status are current File 18 facts, never a stale chat snapshot.
             'summary' => sprintf(
                 __('Current price: %1$s %2$s', 'marketplace'),
-                strtoupper(sanitize_key((string) $listing['currency'])),
+                strtoupper((string) $listing['currency']),
                 number_format((float) $listing['price'], 2, '.', '')
             ),
         ];
