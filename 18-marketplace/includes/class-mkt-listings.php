@@ -352,14 +352,25 @@ final class MKT_Listings {
             return new WP_Error('mkt_listing_not_found', __('Listing not found.', 'marketplace'), ['status' => 404]);
         }
         global $wpdb;
-        if ($save) {
-            $wpdb->query($wpdb->prepare('INSERT IGNORE INTO ' . MKT_DB::table('saves') . ' (user_id,listing_id,created_at) VALUES (%d,%d,%s)', $user_id, (int) $listing['id'], MKT_DB::now()));
-            MKT_Audit::record('listing_saved', 'listing', $public_id);
-        } else {
-            $wpdb->delete(MKT_DB::table('saves'), ['user_id' => $user_id, 'listing_id' => (int) $listing['id']]);
-            MKT_Audit::record('listing_unsaved', 'listing', $public_id);
+        try {
+            return MKT_DB::transaction(static function() use ($wpdb, $save, $user_id, $listing, $public_id) {
+                if ($save) {
+                    $changed = $wpdb->query($wpdb->prepare('INSERT IGNORE INTO ' . MKT_DB::table('saves') . ' (user_id,listing_id,created_at) VALUES (%d,%d,%s)', $user_id, (int) $listing['id'], MKT_DB::now()));
+                } else {
+                    $changed = $wpdb->delete(MKT_DB::table('saves'), ['user_id' => $user_id, 'listing_id' => (int) $listing['id']]);
+                }
+                if ($changed === false) {
+                    return new WP_Error('mkt_save_failed', __('The saved-listing state could not be changed.', 'marketplace'), ['status' => 503]);
+                }
+                if ((int) $changed > 0) {
+                    MKT_Audit::record($save ? 'listing_saved' : 'listing_unsaved', 'listing', $public_id);
+                }
+                // An existing save or already-removed save is an idempotent success.
+                return true;
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_save_failed', __('The saved-listing state could not be changed.', 'marketplace'), ['status' => 503, 'trace_id' => MKT_Audit::trace_id()]);
         }
-        return true;
     }
 
     public static function open_chat(string $public_id, int $user_id): array|WP_Error {
