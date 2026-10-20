@@ -17,36 +17,45 @@ final class MKT_Audit {
             // Abort the governed mutation instead of committing a known gap.
             throw new RuntimeException('Marketplace audit chain lock could not be acquired.');
         }
-        $previous = (string) $wpdb->get_var("SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1");
-        $trace_id = self::trace_id();
-        $created_at = MKT_DB::now();
-        $actor = get_current_user_id();
-        $safe_details = self::sanitize_details($details);
-        $payload = wp_json_encode([$previous,$trace_id,$actor,sanitize_key($action),sanitize_key($object_type),sanitize_text_field($object_public_id),sanitize_text_field($purpose),sanitize_key($outcome),sanitize_key($reason_code),$safe_details,$created_at]);
-        $entry_hash = hash_hmac('sha256', (string) $payload, wp_salt('auth'));
-        $inserted = $wpdb->insert($table, [
-            'entry_id' => MKT_DB::uuid(),
-            'trace_id' => $trace_id,
-            'actor_user_id' => $actor,
-            'action' => sanitize_key($action),
-            'object_type' => sanitize_key($object_type),
-            'object_public_id' => sanitize_text_field($object_public_id),
-            'purpose' => sanitize_text_field($purpose),
-            'outcome' => sanitize_key($outcome),
-            'reason_code' => sanitize_key($reason_code),
-            'details_json' => wp_json_encode($safe_details),
-            'previous_hash' => $previous,
-            'entry_hash' => $entry_hash,
-            'created_at' => $created_at,
-        ]);
-        $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock_name));
-        if (!$inserted) {
-            // Audit is part of the governed owner transaction. A silent audit-write
-            // loss would let a state mutation commit without its required evidence.
-            throw new RuntimeException('Marketplace audit evidence could not be persisted.');
+        $deferred = MKT_DB::transaction_active();
+        if ($deferred) {
+            MKT_DB::release_named_lock_after_transaction($lock_name);
         }
-        do_action('mkt_audit_recorded', $trace_id, $action, $object_type, $object_public_id, $outcome);
-        return $trace_id;
+        try {
+            $previous = (string) $wpdb->get_var("SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1");
+            $trace_id = self::trace_id();
+            $created_at = MKT_DB::now();
+            $actor = get_current_user_id();
+            $safe_details = self::sanitize_details($details);
+            $payload = wp_json_encode([$previous,$trace_id,$actor,sanitize_key($action),sanitize_key($object_type),sanitize_text_field($object_public_id),sanitize_text_field($purpose),sanitize_key($outcome),sanitize_key($reason_code),$safe_details,$created_at]);
+            $entry_hash = hash_hmac('sha256', (string) $payload, wp_salt('auth'));
+            $inserted = $wpdb->insert($table, [
+                'entry_id' => MKT_DB::uuid(),
+                'trace_id' => $trace_id,
+                'actor_user_id' => $actor,
+                'action' => sanitize_key($action),
+                'object_type' => sanitize_key($object_type),
+                'object_public_id' => sanitize_text_field($object_public_id),
+                'purpose' => sanitize_text_field($purpose),
+                'outcome' => sanitize_key($outcome),
+                'reason_code' => sanitize_key($reason_code),
+                'details_json' => wp_json_encode($safe_details),
+                'previous_hash' => $previous,
+                'entry_hash' => $entry_hash,
+                'created_at' => $created_at,
+            ]);
+            if (!$inserted) {
+                // Audit is part of the governed owner transaction. A silent audit-write
+                // loss would let a state mutation commit without its required evidence.
+                throw new RuntimeException('Marketplace audit evidence could not be persisted.');
+            }
+            do_action('mkt_audit_recorded', $trace_id, $action, $object_type, $object_public_id, $outcome);
+            return $trace_id;
+        } finally {
+            if (!$deferred) {
+                $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock_name));
+            }
+        }
     }
 
     public static function verify_chain(int $limit = 500): array {
