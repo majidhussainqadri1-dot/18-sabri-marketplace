@@ -56,15 +56,23 @@ final class MKT_Idempotency {
         try {
             $result = $callback();
             if (is_wp_error($result)) {
-                $wpdb->update($table, [
+                $saved = $wpdb->update($table, [
                     'status' => 'failed',
                     'response_code' => self::error_status($result),
                     'response_json' => wp_json_encode(['code' => $result->get_error_code(), 'message' => $result->get_error_message()]),
-                ], ['actor_user_id' => $actor_id, 'scope' => $scope, 'idempotency_key' => $key]);
+                ], ['actor_user_id' => $actor_id, 'scope' => $scope, 'idempotency_key' => $key, 'status' => 'processing']);
+                if ($saved !== 1) {
+                    return new WP_Error('mkt_idempotency_receipt_failed', __('The request outcome could not be recorded safely.', 'marketplace'), ['status' => 503]);
+                }
                 return $result;
             }
             $response = is_object($result) && method_exists($result, 'get_data') ? $result->get_data() : $result;
-            $wpdb->update($table, ['status' => 'completed', 'response_code' => 200, 'response_json' => wp_json_encode($response)], ['actor_user_id' => $actor_id, 'scope' => $scope, 'idempotency_key' => $key]);
+            $saved = $wpdb->update($table, ['status' => 'completed', 'response_code' => 200, 'response_json' => wp_json_encode($response)], ['actor_user_id' => $actor_id, 'scope' => $scope, 'idempotency_key' => $key, 'status' => 'processing']);
+            if ($saved !== 1) {
+                // The owner mutation may already have committed. Do not claim
+                // success or mark this request failed and trigger a blind replay.
+                return new WP_Error('mkt_idempotency_receipt_failed', __('The change may have saved, but its replay receipt is unavailable. Contact support before retrying.', 'marketplace'), ['status' => 503]);
+            }
             return $result;
         } catch (Throwable $e) {
             $wpdb->update($table, ['status' => 'failed', 'response_code' => 500, 'response_json' => wp_json_encode(['code' => 'mkt_internal_error'])], ['actor_user_id' => $actor_id, 'scope' => $scope, 'idempotency_key' => $key]);

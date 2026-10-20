@@ -10,6 +10,10 @@ final class MKT_Integrations {
         add_filter('sabri_search_providers', [self::class, 'search_provider']);
         add_action('sabri_platform_contract_registry', [self::class, 'contract_registry']);
         add_action('sabri_assurance_register_controls', [self::class, 'assurance_controls']);
+        // File 17 owns all conversations. These filters authorize a File 18
+        // product context only; they never create a second messages store.
+        add_filter('sn_network_context_authorize', [self::class, 'file17_context_authorize'], 10, 6);
+        add_filter('sn_network_context_projection', [self::class, 'file17_context_projection'], 10, 5);
     }
 
     public static function register_providers(): void {
@@ -122,7 +126,8 @@ final class MKT_Integrations {
         if (isset(self::$status_cache['communication'])) return self::$status_cache['communication'];
         $available = has_filter('sabri_communication_open_context_conversation')
             || function_exists('sabri_network_open_context_conversation')
-            || function_exists('sn_open_context_conversation');
+            || function_exists('sn_open_context_conversation')
+            || self::native_file17_available();
         return self::$status_cache['communication'] = [
             'available' => $available,
             'version' => defined('SABRI_NETWORK_VERSION') ? (string) SABRI_NETWORK_VERSION : '',
@@ -158,8 +163,12 @@ final class MKT_Integrations {
             $result = sabri_network_open_context_conversation($actor_id, $other_user_id, $context);
         } elseif (function_exists('sn_open_context_conversation')) {
             $result = sn_open_context_conversation($actor_id, $other_user_id, $context);
-        } else {
+        } elseif (has_filter('sabri_communication_open_context_conversation')) {
             $result = apply_filters('sabri_communication_open_context_conversation', null, $actor_id, $other_user_id, $context);
+        } elseif (self::native_file17_available()) {
+            $result = self::native_file17_handoff($actor_id, $other_user_id, $context);
+        } else {
+            $result = null;
         }
         if (is_wp_error($result)) return $result;
         if (!is_array($result) || (empty($result['conversation_id']) && empty($result['public_id'])) || empty($result['url'])) {
@@ -186,6 +195,83 @@ final class MKT_Integrations {
         return [
             'conversation_id' => sanitize_text_field((string) ($result['conversation_id'] ?? $result['public_id'])),
             'url' => $url,
+        ];
+    }
+
+    private static function native_file17_available(): bool {
+        return function_exists('rest_do_request')
+            && class_exists('WP_REST_Request')
+            && class_exists('SN_REST')
+            && class_exists('SN_Context_Adapters')
+            && class_exists('SN_Messages')
+            && method_exists('SN_Messages', 'messages_url');
+    }
+
+    private static function native_file17_handoff(int $actor_id, int $seller_id, array $context): array|WP_Error {
+        // Re-dispatch through File 17's real REST permission, privacy and
+        // messaging policy checks; do not call its internal DB writers.
+        if (!self::native_file17_available() || get_current_user_id() !== $actor_id) {
+            return new WP_Error('mkt_communication_actor_invalid', __('The conversation must be opened by its authenticated buyer.', 'marketplace'), ['status' => 403]);
+        }
+        $object = (string) ($context['object_public_id'] ?? '');
+        if ($object === '' || !MKT_Listings::get($object, false)) {
+            return new WP_Error('mkt_communication_listing_unavailable', __('This listing is no longer available for conversation.', 'marketplace'), ['status' => 404]);
+        }
+        $create = new WP_REST_Request('POST', '/sabri-network/v2/conversations');
+        $create->set_param('type', 'direct');
+        $create->set_param('user_id', $seller_id);
+        $response = rest_do_request($create);
+        if (is_wp_error($response) || !is_object($response) || !method_exists($response, 'get_status') || (int) $response->get_status() >= 400) {
+            return new WP_Error('mkt_file17_conversation_failed', __('The communication provider could not authorize this conversation.', 'marketplace'), ['status' => 503]);
+        }
+        $payload = (array) $response->get_data();
+        $conversation_id = (int) ($payload['conversation']['id'] ?? 0);
+        if ($conversation_id <= 0) {
+            return new WP_Error('mkt_file17_conversation_malformed', __('The communication provider returned an invalid conversation.', 'marketplace'), ['status' => 502]);
+        }
+        // A repeated handoff returns the same direct conversation, and File 17
+        // upserts the context under its conversation/provider/object constraint.
+        $attach = new WP_REST_Request('POST', '/sabri-network/v2/conversations/' . $conversation_id . '/contexts');
+        $attach->set_param('provider', 'file18_marketplace');
+        $attach->set_param('provider_object_id', $object);
+        $attach->set_param('provider_version', MKT_CONTRACT_VERSION);
+        $attach->set_param('purpose', 'product_enquiry');
+        $attached = rest_do_request($attach);
+        if (is_wp_error($attached) || !is_object($attached) || !method_exists($attached, 'get_status') || (int) $attached->get_status() >= 400) {
+            return new WP_Error('mkt_file17_context_failed', __('The listing context could not be attached safely. Retry the request.', 'marketplace'), ['status' => 503]);
+        }
+        return ['conversation_id' => (string) $conversation_id, 'url' => SN_Messages::messages_url($conversation_id)];
+    }
+
+    public static function file17_context_authorize($previous, string $provider, string $object, int $conversation, int $actor, string $action) {
+        if ($provider !== 'file18_marketplace') return $previous;
+        $listing = MKT_Listings::get($object, false);
+        if (!$listing || !class_exists('SN_DB') || !SN_DB::is_member($conversation, $actor)
+            || !SN_DB::is_member($conversation, (int) $listing['seller_user_id'])) {
+            return new WP_Error('mkt_file17_context_forbidden', __('The listing conversation context is unavailable.', 'marketplace'), ['status' => 403]);
+        }
+        $seller = MKT_Auth::seller_eligibility((int) $listing['seller_user_id']);
+        return !empty($seller['eligible']) ? true
+            : new WP_Error('mkt_file17_seller_unavailable', __('The listing seller is not currently eligible for contact.', 'marketplace'), ['status' => 409]);
+    }
+
+    public static function file17_context_projection($previous, string $provider, string $object, int $conversation, int $actor) {
+        if ($provider !== 'file18_marketplace') return $previous;
+        $permission = self::file17_context_authorize(null, $provider, $object, $conversation, $actor, 'read');
+        if ($permission !== true) return null;
+        $listing = MKT_Listings::get($object, false);
+        if (!$listing) return null;
+        return [
+            'url' => MKT_Listings::url($listing),
+            'label' => (string) $listing['title'],
+            'status' => 'available',
+            // File 17 re-requests the source projection on each context read:
+            // price/status are current File 18 facts, never a stale chat snapshot.
+            'summary' => sprintf(
+                __('Current price: %1$s %2$s', 'marketplace'),
+                strtoupper((string) $listing['currency']),
+                number_format((float) $listing['price'], 2, '.', '')
+            ),
         ];
     }
 
@@ -296,7 +382,8 @@ final class MKT_Integrations {
             'identity' => ['available' => $identity['available'], 'compatible' => $identity['compatible'], 'version' => $identity['version'], 'contract_mode' => $identity['contract_mode']],
             'communication' => self::communication_status(),
             'notifications' => [
-                'available' => function_exists('sabri_notify_event') || function_exists('sabri_notify_user') || has_filter('sabri_notifications_ingest_event'),
+                'available' => (function_exists('sun_ingest_domain_event') && function_exists('sun_register_notification_producer'))
+                    || function_exists('sabri_notify_event') || function_exists('sabri_notify_user') || has_filter('sabri_notifications_ingest_event'),
                 'version' => defined('SUN_VERSION') ? (string) SUN_VERSION : '',
             ],
             'shell' => [
