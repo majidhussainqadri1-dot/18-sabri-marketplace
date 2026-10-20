@@ -487,6 +487,9 @@ final class MKT_DB {
             $last_seller_id = 0;
             do {
                 $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$legacy_sellers} WHERE id>%d ORDER BY id ASC LIMIT 200", $last_seller_id), ARRAY_A);
+                if (!is_array($rows)) {
+                    throw new RuntimeException('Marketplace legacy seller migration read failed.');
+                }
                 foreach ($rows as $row) {
                     $last_seller_id = max($last_seller_id, (int) $row['id']);
                 $user_id = (int) ($row['user_id'] ?? 0);
@@ -498,7 +501,7 @@ final class MKT_DB {
                 if ($exists) {
                     continue;
                 }
-                $wpdb->insert(self::table('sellers'), [
+                $seller_inserted = $wpdb->insert(self::table('sellers'), [
                     'public_id' => self::uuid(),
                     'user_id' => $user_id,
                     'store_name' => sanitize_text_field((string) ($row['store_name'] ?? '')),
@@ -513,6 +516,9 @@ final class MKT_DB {
                     'created_at' => self::now(),
                     'updated_at' => self::now(),
                 ]);
+                if ($seller_inserted !== 1) {
+                    throw new RuntimeException('Marketplace legacy seller migration write failed; checkpoint not advanced.');
+                }
                     $report['sellers']++;
                 }
             } while (count($rows) === 200);
@@ -521,6 +527,9 @@ final class MKT_DB {
             $last_product_id = 0;
             do {
                 $rows = $wpdb->get_results($wpdb->prepare("SELECT p.*,s.user_id AS legacy_user_id FROM {$legacy_products} p LEFT JOIN {$legacy_sellers} s ON s.id=p.seller_id WHERE p.id>%d ORDER BY p.id ASC LIMIT 200", $last_product_id), ARRAY_A);
+                if (!is_array($rows)) {
+                    throw new RuntimeException('Marketplace legacy listing migration read failed.');
+                }
                 foreach ($rows as $row) {
                     $last_product_id = max($last_product_id, (int) $row['id']);
                 $user_id = (int) ($row['legacy_user_id'] ?? 0);
@@ -535,7 +544,7 @@ final class MKT_DB {
                     continue;
                 }
                 $status = in_array((string) ($row['status'] ?? ''), ['published','active'], true) ? 'review' : 'draft';
-                $wpdb->insert(self::table('listings'), [
+                $listing_inserted = $wpdb->insert(self::table('listings'), [
                     'public_id' => self::uuid(),
                     'seller_id' => $seller_id,
                     'title' => sanitize_text_field((string) ($row['title'] ?? 'Legacy listing')),
@@ -560,6 +569,9 @@ final class MKT_DB {
                     'created_at' => self::now(),
                     'updated_at' => self::now(),
                 ]);
+                if ($listing_inserted !== 1) {
+                    throw new RuntimeException('Marketplace legacy listing migration write failed; checkpoint not advanced.');
+                }
                     $report['listings']++;
                 }
             } while (count($rows) === 200);
@@ -576,14 +588,20 @@ final class MKT_DB {
             $last_handoff_id = 0;
             do {
                 $ids = $wpdb->get_col($wpdb->prepare("SELECT id FROM {$table} WHERE id>%d ORDER BY id ASC LIMIT 500", $last_handoff_id));
+                if (!is_array($ids)) {
+                    throw new RuntimeException('Marketplace legacy communication handoff inventory failed.');
+                }
                 foreach ($ids as $legacy_id) {
                     $last_handoff_id = max($last_handoff_id, (int) $legacy_id);
                     $payload_hash = hash('sha256', $type . ':' . (int) $legacy_id . ':' . MKT_SCHEMA_VERSION);
-                    $wpdb->query($wpdb->prepare(
+                    $handoff_inserted = $wpdb->query($wpdb->prepare(
                         'INSERT IGNORE INTO ' . self::table('migration_handoffs') . ' (legacy_type,legacy_id,target_owner,target_reference,payload_hash,status,attempts,last_error,created_at,updated_at) VALUES (%s,%d,%s,%s,%s,%s,0,%s,%s,%s)',
                         $type, (int) $legacy_id, 'file-17-communication', '', $payload_hash, 'pending', '', self::now(), self::now()
                     ));
-                    $report['communication_handoffs']++;
+                    if ($handoff_inserted === false) {
+                        throw new RuntimeException('Marketplace legacy communication handoff write failed; migration cannot be marked complete.');
+                    }
+                    if ($handoff_inserted === 1) $report['communication_handoffs']++;
                 }
             } while (count($ids) === 500);
         }
