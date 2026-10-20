@@ -419,7 +419,9 @@ final class MKT_DB {
     public static function transaction(callable $callback) {
         global $wpdb;
         $wpdb->last_error = '';
-        $wpdb->query('START TRANSACTION');
+        if ($wpdb->query('START TRANSACTION') === false) {
+            throw new RuntimeException('Marketplace database transaction could not start.');
+        }
         try {
             $result = $callback($wpdb);
             if (is_wp_error($result)) {
@@ -429,7 +431,9 @@ final class MKT_DB {
             if ($result === false || $wpdb->last_error !== '') {
                 throw new RuntimeException($wpdb->last_error ?: 'Marketplace database operation failed.');
             }
-            $wpdb->query('COMMIT');
+            if ($wpdb->query('COMMIT') === false) {
+                throw new RuntimeException('Marketplace database transaction could not commit.');
+            }
             return $result;
         } catch (Throwable $e) {
             $wpdb->query('ROLLBACK');
