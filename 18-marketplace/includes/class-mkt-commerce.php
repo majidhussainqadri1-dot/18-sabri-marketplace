@@ -19,7 +19,7 @@ final class MKT_Commerce {
         if ($seller_id === $buyer_id) {
             return new WP_Error('mkt_self_offer', __('You cannot offer on your own listing.', 'marketplace'), ['status' => 422]);
         }
-        $amount = round((float) ($input['amount'] ?? 0), 2);
+        $amount = is_numeric($input['amount'] ?? null) ? round((float) $input['amount'], 2) : NAN;
         $currency = MKT_DB::currency((string) ($input['currency'] ?? $listing['currency']));
         if (!is_finite($amount) || $amount <= 0 || $currency !== $listing['currency']) {
             return new WP_Error('mkt_invalid_offer', __('Offer amount and currency are invalid.', 'marketplace'), ['status' => 422]);
@@ -160,7 +160,7 @@ final class MKT_Commerce {
                         return new WP_Error('mkt_invalid_counter', __('The listing currency changed. Reload before countering.', 'marketplace'), ['status' => 409]);
                     }
 
-                    $amount = round((float) ($input['amount'] ?? 0), 2);
+                    $amount = is_numeric($input['amount'] ?? null) ? round((float) $input['amount'], 2) : NAN;
                     if (!is_finite($amount) || $amount <= 0) {
                         return new WP_Error('mkt_invalid_counter', __('Counter-offer amount is invalid.', 'marketplace'), ['status' => 422]);
                     }
