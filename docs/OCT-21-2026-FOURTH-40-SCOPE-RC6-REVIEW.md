@@ -56,6 +56,8 @@
 2. **F18-R4-02 — Negative listing price silently converted to free.** `MKT_Listings::sanitize_input` clamped negative price to 0.00 before `MKT_Policy::evaluate_listing` could reject invalid price. Preserve value for domain rejection, avoiding a misleading free listing. Negative stock is similarly preserved for explicit error instead of silently rewritten.
 3. **F18-R4-03 — Non-finite money/stock values.** PHP numeric conversion can produce `INF` for extremely large exponential inputs. Listing price/quantity and offer/counteroffer amounts lacked finite-number validation. Added `is_finite()` guards in actual policy and commerce methods. These numeric changes are **not** a full fixed-point-money redesign or a real database-boundary benchmark.
 
+4. **F18-R4-04 — Silent parsing of missing/non-numeric price and partially numeric offers.** The original sanitizer defaulted missing price or non-numeric text to zero, whereas commerce numeric casts could partially accept strings (for example an amount followed by a currency suffix). Added raw pre-coercion validation to both listing create/edit and strict is_numeric checks to both offer/counteroffer paths. Explicit numeric zero remains valid for free listings. Regression fixtures include missing price, nonnumeric and partially numeric values, sub-cent negatives, overflowing exponent and valid zero.
+
 ## Corrective tests and CI
 - `tests/test-outbox-required-notification-ack.php`: executes real File18 outbox worker with fake $wpdb and failing/working partner receipt, domain success, actor-only notifications, and retry/dead-letter limits.
 - `tests/test-money-stock-validation.php`: exercises actual private listing normalization and actual domain policy with negative, infinite and ordinary finite numbers.
