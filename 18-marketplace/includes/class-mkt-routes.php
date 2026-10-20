@@ -54,7 +54,12 @@ final class MKT_Routes {
         }
         $home = wp_parse_url(home_url('/'));
         $target = wp_parse_url($validated);
-        if (!is_array($home) || !is_array($target) || empty($target['host']) || strcasecmp((string) ($home['host'] ?? ''), (string) $target['host']) !== 0) {
+        if (!is_array($home) || !is_array($target) || empty($target['host']) ||
+            strcasecmp((string) ($home['host'] ?? ''), (string) $target['host']) !== 0 ||
+            strtolower((string) ($home['scheme'] ?? '')) !== strtolower((string) ($target['scheme'] ?? '')) ||
+            (int) ($home['port'] ?? (strtolower((string) ($home['scheme'] ?? '')) === 'https' ? 443 : 80)) !==
+                (int) ($target['port'] ?? (strtolower((string) ($target['scheme'] ?? '')) === 'https' ? 443 : 80)) ||
+            isset($target['user']) || isset($target['pass'])) {
             return $fallback;
         }
         return $validated;
