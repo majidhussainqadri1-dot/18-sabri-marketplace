@@ -2,45 +2,48 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo '[1/12] PHP syntax'
+echo '[1/13] PHP syntax'
 while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find "$ROOT" -type f -name '*.php' -print0)
 
-echo '[2/12] JavaScript syntax'
+echo '[2/13] JavaScript syntax'
 node --check "$ROOT/assets/js/marketplace.js"
 node --check "$ROOT/assets/js/marketplace-completion.js"
 
-echo '[3/12] CSS structural balance'
+echo '[3/13] CSS structural balance'
 python3 -c "import pathlib; s=pathlib.Path('$ROOT/assets/css/marketplace.css').read_text(); assert s.count('{')==s.count('}'); print('PASS: CSS braces balanced')"
 
-echo '[4/12] State machines'
+echo '[4/13] State machines'
 php "$ROOT/tests/test-state-machines.php"
 
-echo '[5/12] Contract invariants'
+echo '[5/13] Contract invariants'
 php "$ROOT/tests/test-contracts.php"
 
-echo '[6/12] Source architecture'
+echo '[6/13] Source architecture'
 php "$ROOT/tests/test-source-architecture.php"
 
-echo '[7/12] Adversarial invariants'
+echo '[7/13] Adversarial invariants'
 php "$ROOT/tests/test-review-invariants.php"
 
-echo '[8/12] October forty-scope corrective regressions'
+echo '[8/13] October forty-scope corrective regressions'
 php "$ROOT/tests/test-october-40-scope-regressions.php"
 
-echo '[9/12] Required documentation and assets'
+echo '[9/13] File 19 native notification contract'
+php "$ROOT/tests/test-file19-notification-contract.php"
+
+echo '[10/13] Required documentation and assets'
 for f in marketplace.php uninstall.php readme.txt README.md CHANGELOG.md assets/css/marketplace.css assets/js/marketplace.js assets/js/marketplace-completion.js includes/class-mkt-governance.php includes/class-mkt-plan-completion.php includes/class-mkt-finalization.php includes/class-mkt-release-gates.php docs/REQUIREMENTS-TRACEABILITY.md docs/STAGING-ACCEPTANCE.md docs/FOUR-ROUND-GOVERNING-PLAN-AUDIT.md; do test -s "$ROOT/$f"; done
 
-echo '[10/12] Forbidden artifact scan'
+echo '[11/13] Forbidden artifact scan'
 ! grep -RInE --exclude-dir=tests --exclude='*.md' --exclude='readme.txt' '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,})' "$ROOT"
 ! grep -RInE --include='*.php' 'CREATE TABLE.*(conversation|messages|calls|wallet|escrow|payout)' "$ROOT/includes"
 ! grep -RInE --include='*.php' '\b(eval|exec|shell_exec|passthru|system)[[:space:]]*\(' "$ROOT"
 
-echo '[11/12] Release identity'
+echo '[12/13] Release identity'
 grep -q 'Version: 2.1.0' "$ROOT/marketplace.php"
 grep -q "define('MKT_VERSION', '2.1.0')" "$ROOT/marketplace.php"
 grep -q 'Stable tag: 2.1.0' "$ROOT/readme.txt"
 grep -q '0% platform commission' "$ROOT/readme.txt"
 
-echo '[12/12] Four-plan governing invariants'
+echo '[13/13] Four-plan governing invariants'
 php "$ROOT/tests/test-four-plan-invariants.php"
 echo 'ALL STATIC AND CONTRACT TESTS PASSED'
