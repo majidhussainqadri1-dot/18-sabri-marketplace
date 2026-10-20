@@ -30,10 +30,11 @@ class SN_Messages {public static function messages_url(int $id):string{return 'h
 class SN_DB {public static function is_member(int $conversation,int $user):bool{return $conversation===987&&in_array($user,[41,82],true);}}
 class MKT_Listings {
     public static bool $active=true;
+    public static float $price=145.50;
     public static function get(string $id,bool $private=false):?array {
         return self::$active&&$id==='f18-listing-123456'?[
             'public_id'=>$id,'title'=>'Approved textbook','seller_user_id'=>82,
-            'slug'=>'approved-textbook','status'=>'active'
+            'slug'=>'approved-textbook','status'=>'active','currency'=>'PKR','price'=>self::$price
         ]:null;
     }
     public static function url(array $r):string {return home_url('/marketplace/listing/'.$r['public_id'].'/'.$r['slug'].'/');}
@@ -71,6 +72,10 @@ assert_same('https://sabri.example/messages/987/',$ok['url'],'Navigation uses th
 assert_same(['/sabri-network/v2/conversations','/sabri-network/v2/conversations/987/contexts'],$GLOBALS['routes'],'Only File17 REST owner routes perform conversation/context writes.');
 $projection=($GLOBALS['filters']['sn_network_context_projection'])(null,'file18_marketplace','f18-listing-123456',987,41);
 assert_same('Approved textbook',$projection['label'],'Projection exposes only the current publicly eligible listing label.');
+assert_same('Current price: PKR 145.50',$projection['summary'],'Conversation context displays File18 current canonical listing price, not caller-supplied chat data.');
+MKT_Listings::$price=159.00;
+$fresh=($GLOBALS['filters']['sn_network_context_projection'])(null,'file18_marketplace','f18-listing-123456',987,41);
+assert_same('Current price: PKR 159.00',$fresh['summary'],'On read, File17 context projection reflects updated live File18 price.');
 assert_true(is_wp_error(($GLOBALS['filters']['sn_network_context_authorize'])(null,'file18_marketplace','f18-listing-123456',987,12,'read')),'Unrelated user cannot read File17 Marketplace context.');
 $GLOBALS['context_status']=503;
 assert_true(is_wp_error(MKT_Integrations::open_context_conversation(41,82,$ctx)),'File17 context attachment failure is never reported as successful handoff.');
