@@ -18,3 +18,7 @@ Six newly found source defects repaired: deal INSERT ID lifetime, migration fail
 ## Third fresh 40-scope review / RC5 (21 October 2026)
 
 Draft PR #5 adds five targeted corrective source-domain fixes and direct PHP failure simulation for safety report/Outbox/Audit and audit transaction lock lifetime, source assertions for Saved Listings, REST atomic owner transitions, and updated RC5 reproducible build. Repeat 40 full static/regression runs for PHP 8.1 and 8.3 are configured; final exact HEAD CI must confirm count. This is **not Staging-Accepted or Live-Deployed**. Live exact installed files and DB/schema migrations unverified; WPVibe has no registered site and historic Cloudflare 530 has undiagnosed origin.
+
+## Fourth corrective batch (21 October 2026) — Source only / 2.1.0-RC6
+
+Required File19 recipient acknowledgement now gates Marketplace outbox completion, rather than being ignored when another event consumer confirms. Listing normalization no longer makes a negative price silently free, and listing/offer/counter numeric values must be finite. Fault-injection and domain-policy tests in the full static QA are configured for 40 repeated rounds on each PHP 8.1/8.3 CI matrix member; confirm exact HEAD logs before claiming success. All 40 scoped implementation anchors do not prove real WordPress/MySQL/companion acceptance. See the root `docs/OCT-21-2026-FOURTH-40-SCOPE-RC6-REVIEW.md`. Deployment, database, migration and live errors remain unverified; WPVibe Cloudflare HTTP 530 is unresolved and its origin unknown.
