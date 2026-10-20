@@ -59,4 +59,22 @@ assert_true(!str_contains($audit, "'LOCK_UNAVAILABLE';"), 'New audit writes must
 assert_true(str_contains($db, "if ($" . "wpdb->query('START TRANSACTION') === false)"), 'Transaction start error blocks owner mutation.');
 assert_true(str_contains($db, "if ($" . "wpdb->query('COMMIT') === false)"), 'Transaction commit error blocks false success.');
 
+
+$commerce = $read('class-mkt-commerce.php');
+$deal = substr($commerce, (int) strpos($commerce, 'private static function create_deal_from_offer'), (int) (strpos($commerce, 'public static function transition_deal') - strpos($commerce, 'private static function create_deal_from_offer')));
+$dealInserted = strpos($deal, '$new_deal_id = (int) $wpdb->insert_id;');
+$dealAudit = strpos($deal, "MKT_Audit::record('deal_created'");
+assert_true($dealInserted !== false && $dealAudit !== false && $dealInserted < $dealAudit, 'Deal PK is captured before audit and outbox insert calls.');
+assert_true(str_contains($deal, "WHERE id=%d', $new_deal_id") && str_contains($deal, 'mkt_deal_readback_failed'), 'Deal readback uses the saved deal PK and rejects a missing or mismatched row.');
+assert_true(!str_contains($deal, "WHERE id=%d', $wpdb->insert_id"), 'Deal readback must not use a mutable last-insert id.');
+
+assert_true(str_contains($db, 'Marketplace legacy seller migration write failed'), 'Legacy seller migration refuses silent insert failure.');
+assert_true(str_contains($db, 'Marketplace legacy listing migration write failed'), 'Legacy listing migration refuses silent insert failure.');
+assert_true(str_contains($db, 'Marketplace legacy communication handoff write failed'), 'Communication handoff migration rejects failed inserts.');
+assert_true(str_contains($db, 'legacy seller migration read failed') && str_contains($db, 'legacy listing migration read failed'), 'Legacy inventory failure cannot masquerade as empty input.');
+assert_true(str_contains($db, "'migration_handoffs' => ['id','legacy_type','legacy_id','status']"), 'Schema verification checks version-critical migration columns.');
+$verifyTables = strpos($db, 'foreach (self::TABLES as $name)');
+$promote = strpos($db, "update_option('mkt_schema_version', MKT_SCHEMA_VERSION");
+assert_true($verifyTables !== false && $promote !== false && $verifyTables < $promote, 'Schema option promotion occurs after table/column verification.');
+
 fwrite(STDOUT, "October forty-scope corrective invariants complete.\n");
