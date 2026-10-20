@@ -96,4 +96,16 @@ assert_true(str_contains($listingSave, 'MKT_DB::transaction(static function()'),
 assert_true(str_contains($listingSave, 'if ($changed === false)'), 'Failed save or unsave writes are not reported as successful.');
 assert_true(str_contains($listingSave, 'mkt_save_failed'), 'Failed save or unsave responds with a distinct machine error.');
 
+$commerce = $read('class-mkt-commerce.php');
+$policy = $read('class-mkt-policy.php');
+assert_true(str_contains($events, '$notification_required ? self::send_derived_notifications($event) : false') &&
+    str_contains($events, '(!$notification_required || $notification_ack)'),
+    'Outbox cannot complete if a required File 19 notification was not acknowledged.');
+assert_true(str_contains($listings, "'price' => round((float) ") &&
+    str_contains($listings, "'quantity' => round((float) "),
+    'Invalid negative listing amounts are not silently zero-clamped before domain policy.');
+assert_true(str_contains($policy, 'is_finite((float)') &&
+    substr_count($commerce, '!is_finite($amount)') >= 2,
+    'Listing, offer and counteroffer inputs explicitly reject non-finite monetary values.');
+
 fwrite(STDOUT, "October forty-scope corrective invariants complete.\n");
