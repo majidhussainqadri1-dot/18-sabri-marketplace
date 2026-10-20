@@ -94,7 +94,7 @@ jobs:
               cat "$RUNNER_TEMP/file18-review-${round}.log"
               exit 1
             fi
-            printf 'FILE18_REVIEW_ROUND=%02d RESULT=PASS PHP=%s HEAD=%s\\n' "$round" "${{ matrix.php }}" "${{ github.event.pull_request.head.sha }}"
+            printf 'FILE18_REVIEW_ROUND=%02d RESULT=PASS PHP=%s HEAD=%s\n' "$round" "${{ matrix.php }}" "${{ github.event.pull_request.head.sha }}"
           done
           echo 'FILE18_REVIEW_TOTAL=40 FILE18_REVIEW_PASSED=40 FILE18_REVIEW_FAILED=0'
       - name: Deterministic release build
