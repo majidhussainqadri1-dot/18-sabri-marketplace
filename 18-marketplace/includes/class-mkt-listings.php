@@ -63,6 +63,8 @@ final class MKT_Listings {
         if (!empty($settings['safe_mode']) || empty($settings['selling_enabled'])) {
             return new WP_Error('mkt_selling_paused', __('New listings are temporarily paused.', 'marketplace'), ['status' => 503]);
         }
+        $numeric = self::validate_numeric_input($input);
+        if (is_wp_error($numeric)) return $numeric;
         $seller = self::ensure_seller($user_id);
         if (is_wp_error($seller)) {
             return $seller;
@@ -132,6 +134,8 @@ final class MKT_Listings {
             return new WP_Error('mkt_stale_version', __('The listing changed. Reload and try again.', 'marketplace'), ['status' => 409, 'current_version' => (int) $listing['version']]);
         }
         $merged = array_merge($listing, $input);
+        $numeric = self::validate_numeric_input($merged);
+        if (is_wp_error($numeric)) return $numeric;
         $data = self::sanitize_input($merged);
         $policy = MKT_Policy::evaluate_listing($data, MKT_Auth::assertions($user_id));
         if (!$policy['valid']) {
@@ -565,6 +569,20 @@ final class MKT_Listings {
         return mb_substr($slug, 0, 220) . '-' . substr(str_replace('-', '', $public_id), 0, 8);
     }
 
+    private static function validate_numeric_input(array $input): bool|WP_Error {
+        // Never silently turn an omitted, malformed or overflowing price into a
+        // free listing. Zero is allowed only if explicitly supplied and valid.
+        $price = $input['price'] ?? null;
+        if (!is_numeric($price) || !is_finite((float) $price) || (float) $price < 0) {
+            return new WP_Error('mkt_invalid_price', __('Enter a valid non-negative listing price.', 'marketplace'), ['status' => 422]);
+        }
+        $quantity = $input['quantity'] ?? 1;
+        if (!is_numeric($quantity) || !is_finite((float) $quantity) || (float) $quantity < 0) {
+            return new WP_Error('mkt_invalid_quantity', __('Enter a valid non-negative listing quantity.', 'marketplace'), ['status' => 422]);
+        }
+        return true;
+    }
+
     private static function sanitize_input(array $input): array {
         $delivery_modes = array_values(array_unique(array_filter(array_map('sanitize_key', (array) ($input['delivery_modes'] ?? [])))));
         $contact_modes = array_values(array_unique(array_filter(array_map('sanitize_key', (array) ($input['contact_modes'] ?? ['file17_chat'])))));
@@ -579,9 +597,9 @@ final class MKT_Listings {
             'listing_type' => in_array((string) ($input['listing_type'] ?? ''), ['product','service','digital'], true) ? (string) $input['listing_type'] : 'product',
             'condition_name' => in_array((string) ($input['condition_name'] ?? ''), ['new','used','refurbished','not_applicable'], true) ? (string) $input['condition_name'] : 'new',
             'description' => wp_kses_post((string) ($input['description'] ?? '')),
-            'price' => round(max(0, (float) ($input['price'] ?? 0)), 2),
+            'price' => round((float) ($input['price'] ?? 0), 2),
             'currency' => MKT_DB::currency((string) ($input['currency'] ?? MKT_DB::settings()['default_currency'])),
-            'quantity' => round(max(0, (float) ($input['quantity'] ?? 1)), 3),
+            'quantity' => round((float) ($input['quantity'] ?? 1), 3),
             'availability' => in_array((string) ($input['availability'] ?? ''), ['available','limited','preorder','service_schedule'], true) ? (string) $input['availability'] : 'available',
             'location_country' => strtoupper(substr(preg_replace('/[^A-Z]/i', '', (string) ($input['location_country'] ?? '')), 0, 2)),
             'location_region' => mb_substr(sanitize_text_field((string) ($input['location_region'] ?? '')), 0, 120),

@@ -112,8 +112,8 @@ final class MKT_Policy {
         if (class_exists('MKT_Governance') && MKT_Governance::prohibited_claim($haystack)) {
             $errors[] = ['code'=>'prohibited_claim','message'=>__('The listing contains a prohibited or unsubstantiated medical claim.', 'marketplace')];
         }
-        if ((float) ($data['price'] ?? 0) < 0) $errors[] = ['code'=>'invalid_price','message'=>__('Price cannot be negative.', 'marketplace')];
-        if ((string) ($data['listing_type'] ?? 'product') !== 'service' && (float) ($data['quantity'] ?? 0) <= 0) $errors[] = ['code'=>'invalid_quantity','message'=>__('Product quantity must be greater than zero.', 'marketplace')];
+        if (!is_finite((float) ($data['price'] ?? 0)) || (float) ($data['price'] ?? 0) < 0) $errors[] = ['code'=>'invalid_price','message'=>__('Price must be a finite non-negative amount.', 'marketplace')];
+        if (!is_finite((float) ($data['quantity'] ?? 0)) || ((string) ($data['listing_type'] ?? 'product') !== 'service' && (float) ($data['quantity'] ?? 0) <= 0)) $errors[] = ['code'=>'invalid_quantity','message'=>__('Product quantity must be finite and, for goods, greater than zero.', 'marketplace')];
         if (!in_array(strtoupper((string) ($data['currency'] ?? '')), MKT_Contracts::allowed_currencies(), true)) $errors[] = ['code'=>'invalid_currency','message'=>__('Unsupported currency.', 'marketplace')];
         if (!empty($seller_assertions['is_minor']) && empty($seller_assertions['guardian_verified'])) $errors[] = ['code'=>'guardian_required','message'=>__('Verified guardian consent is required.', 'marketplace')];
         $declarations = is_array($data['declarations'] ?? null) ? $data['declarations'] : [];
