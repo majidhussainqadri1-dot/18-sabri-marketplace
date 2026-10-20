@@ -2,6 +2,29 @@
 defined('ABSPATH') || exit;
 
 final class MKT_DB {
+    private static bool $owner_transaction_open = false;
+    /** Each acquisition is released once, including re-entrant MySQL GET_LOCK calls. */
+    private static array $deferred_named_locks = [];
+
+    public static function transaction_active(): bool {
+        return self::$owner_transaction_open;
+    }
+
+    public static function release_named_lock_after_transaction(string $lock_name): void {
+        if (!self::$owner_transaction_open) {
+            throw new LogicException('Deferred marketplace lock must belong to an active owner transaction.');
+        }
+        self::$deferred_named_locks[] = $lock_name;
+    }
+
+    private static function release_deferred_named_locks(): void {
+        global $wpdb;
+        while (self::$deferred_named_locks) {
+            $lock_name = array_pop(self::$deferred_named_locks);
+            $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock_name));
+        }
+    }
+
     private const TABLES = [
         'sellers','policies','listings','media_refs','saves','offers','deals','reports','disputes',
         'outbox','inbox','idempotency','audit','metrics_daily','migration_handoffs',
@@ -441,10 +464,16 @@ final class MKT_DB {
 
     public static function transaction(callable $callback) {
         global $wpdb;
+        // MySQL does not nest START TRANSACTION: a second START would implicitly
+        // commit the outer owner changes. Reuse the outer unit of work instead.
+        if (self::$owner_transaction_open) {
+            return $callback($wpdb);
+        }
         $wpdb->last_error = '';
         if ($wpdb->query('START TRANSACTION') === false) {
             throw new RuntimeException('Marketplace database transaction could not start.');
         }
+        self::$owner_transaction_open = true;
         try {
             $result = $callback($wpdb);
             if (is_wp_error($result)) {
@@ -461,6 +490,11 @@ final class MKT_DB {
         } catch (Throwable $e) {
             $wpdb->query('ROLLBACK');
             throw $e;
+        } finally {
+            // The named audit lock is kept until COMMIT or ROLLBACK, not merely
+            // until the INSERT statement, preventing concurrent chain forks.
+            self::$owner_transaction_open = false;
+            self::release_deferred_named_locks();
         }
     }
 

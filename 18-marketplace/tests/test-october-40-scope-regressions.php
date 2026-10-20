@@ -77,4 +77,23 @@ $verifyTables = strpos($db, 'foreach (self::TABLES as $name)');
 $promote = strpos($db, "update_option('mkt_schema_version', MKT_SCHEMA_VERSION");
 assert_true($verifyTables !== false && $promote !== false && $verifyTables < $promote, 'Schema option promotion occurs after table/column verification.');
 
+$moderation = $read('class-mkt-moderation.php');
+$reportOpen = strpos($moderation, 'public static function create_report');
+$reportNext = strpos($moderation, 'private static function validate_report_target');
+assert_true($reportOpen !== false && $reportNext > $reportOpen, 'Report command has an inspectable owner boundary.');
+$reportSource = substr($moderation, $reportOpen, $reportNext - $reportOpen);
+assert_true(str_contains($reportSource, 'MKT_DB::transaction(static function()'), 'Report, audit, and outbox are inside one owner transaction.');
+assert_true(str_contains($reportSource, '$report_id = (int) $wpdb->insert_id;'), 'Report primary key is captured before audit/outbox inserts.');
+assert_true(str_contains($reportSource, "WHERE id=%d', $" . "report_id"), 'Report readback uses its captured key.');
+assert_true(!str_contains($reportSource, "WHERE id=%d', $" . "wpdb->insert_id"), 'Report readback never uses mutable last-insert ID.');
+assert_true(str_contains($reportSource, 'mkt_report_readback_failed'), 'Missing or mismatched report readback is rejected.');
+
+$listingSaveStart = strpos($listings, 'public static function save(');
+$listingSaveEnd = strpos($listings, 'public static function open_chat(');
+assert_true($listingSaveStart !== false && $listingSaveEnd > $listingSaveStart, 'Saved listing has an inspectable command boundary.');
+$listingSave = substr($listings, $listingSaveStart, $listingSaveEnd - $listingSaveStart);
+assert_true(str_contains($listingSave, 'MKT_DB::transaction(static function()'), 'Save and audit run in a single owner transaction.');
+assert_true(str_contains($listingSave, 'if ($changed === false)'), 'Failed save or unsave writes are not reported as successful.');
+assert_true(str_contains($listingSave, 'mkt_save_failed'), 'Failed save or unsave responds with a distinct machine error.');
+
 fwrite(STDOUT, "October forty-scope corrective invariants complete.\n");

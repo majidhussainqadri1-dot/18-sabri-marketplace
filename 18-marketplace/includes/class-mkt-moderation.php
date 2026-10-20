@@ -25,31 +25,46 @@ final class MKT_Moderation {
         }
 
         global $wpdb;
-        $public_id = MKT_DB::uuid();
-        $inserted = $wpdb->insert(MKT_DB::table('reports'), [
-            'public_id' => $public_id,
-            'reporter_user_id' => $user_id,
-            'target_type' => $target_type,
-            'target_public_id' => $target_public_id,
-            'reason' => $reason,
-            'details' => $details,
-            'evidence_refs' => wp_json_encode(self::sanitize_evidence_refs((array) ($input['evidence_refs'] ?? []))),
-            'status' => 'submitted',
-            'version' => 1,
-            'created_at' => MKT_DB::now(),
-            'updated_at' => MKT_DB::now(),
-        ]);
-        if (!$inserted) {
-            return new WP_Error('mkt_report_failed', __('The report could not be submitted.', 'marketplace'), ['status' => 500]);
+        try {
+            return MKT_DB::transaction(static function() use ($wpdb, $user_id, $target_type, $target_public_id, $reason, $details, $input) {
+                $public_id = MKT_DB::uuid();
+                $inserted = $wpdb->insert(MKT_DB::table('reports'), [
+                    'public_id' => $public_id,
+                    'reporter_user_id' => $user_id,
+                    'target_type' => $target_type,
+                    'target_public_id' => $target_public_id,
+                    'reason' => $reason,
+                    'details' => $details,
+                    'evidence_refs' => wp_json_encode(self::sanitize_evidence_refs((array) ($input['evidence_refs'] ?? []))),
+                    'status' => 'submitted',
+                    'version' => 1,
+                    'created_at' => MKT_DB::now(),
+                    'updated_at' => MKT_DB::now(),
+                ]);
+                if ($inserted !== 1) {
+                    return new WP_Error('mkt_report_failed', __('The report could not be submitted.', 'marketplace'), ['status' => 500]);
+                }
+                // Capture the canonical report ID before audit/outbox inserts can change insert_id.
+                $report_id = (int) $wpdb->insert_id;
+                if ($report_id <= 0) {
+                    return new WP_Error('mkt_report_failed', __('The submitted report could not be confirmed.', 'marketplace'), ['status' => 500]);
+                }
+                MKT_Audit::record('report_submitted', 'report', $public_id, ['target_type' => $target_type, 'target_public_id' => $target_public_id, 'reason' => $reason], 'success', '', 'marketplace_safety');
+                MKT_Events::enqueue('MarketplaceReportSubmitted.v1', 'report', $public_id, [
+                    'safe_summary' => __('A marketplace safety report was submitted.', 'marketplace'),
+                    'target_type' => $target_type,
+                    'target_public_id' => $target_public_id,
+                    'reason_taxonomy' => $reason,
+                ], 'restricted');
+                $report = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE id=%d', $report_id), ARRAY_A);
+                if (!$report || (string) $report['public_id'] !== $public_id) {
+                    return new WP_Error('mkt_report_readback_failed', __('The submitted report could not be verified.', 'marketplace'), ['status' => 500]);
+                }
+                return self::report_dto($report);
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_report_failed', __('The report could not be submitted safely.', 'marketplace'), ['status' => 500, 'trace_id' => MKT_Audit::trace_id()]);
         }
-        MKT_Audit::record('report_submitted', 'report', $public_id, ['target_type' => $target_type, 'target_public_id' => $target_public_id, 'reason' => $reason], 'success', '', 'marketplace_safety');
-        MKT_Events::enqueue('MarketplaceReportSubmitted.v1', 'report', $public_id, [
-            'safe_summary' => __('A marketplace safety report was submitted.', 'marketplace'),
-            'target_type' => $target_type,
-            'target_public_id' => $target_public_id,
-            'reason_taxonomy' => $reason,
-        ], 'restricted');
-        return self::report_dto($wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE id=%d', $wpdb->insert_id), ARRAY_A));
     }
 
     private static function validate_report_target(string $target_type, string $public_id, int $user_id): array|WP_Error {
