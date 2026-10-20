@@ -125,7 +125,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.php == '8.3'
         with:
-          name: file18-marketplace-2.1.0-rc5
+          name: file18-marketplace-2.1.0-rc6
           path: |
             ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC6.zip
             ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC6.zip.sha256
