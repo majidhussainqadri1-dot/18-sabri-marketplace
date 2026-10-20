@@ -80,13 +80,15 @@ final class MKT_Events {
                     throw new RuntimeException('Outbox event envelope is malformed.');
                 }
                 $platform_ack = (bool) apply_filters('sabri_platform_ingest_event', false, $event);
-                $local_consumers = has_action('mkt_event') > 0;
-                if ($local_consumers) {
+                // An action hook being registered does not acknowledge delivery.
+                // Local consumers must positively acknowledge after handling the event.
+                if (has_action('mkt_event') > 0) {
                     do_action('mkt_event', $event);
                 }
+                $local_ack = (bool) apply_filters('mkt_event_acknowledged', false, $event);
                 $notification_ack = self::send_derived_notifications($event);
                 $recipients = array_values(array_filter(array_unique(array_map('intval', (array) (($event['payload']['notify_user_ids'] ?? []))))));
-                $ok = $platform_ack || $local_consumers || ($recipients && $notification_ack);
+                $ok = $platform_ack || $local_ack || ($recipients && $notification_ack);
                 if (!$ok) {
                     $error = 'No platform, local, or notification consumer acknowledged the event.';
                 }
@@ -254,14 +256,32 @@ final class MKT_Events {
             }
         }
         try {
-            $result = $handler($event);
+            // Owner mutation, mandatory audit, and inbox acknowledgement must commit
+            // atomically. Otherwise a failed report/audit write can be replayed twice.
+            $result = MKT_DB::transaction(static function() use ($handler, $event, $wpdb, $source, $event_id) {
+                $handled = $handler($event);
+                if (is_wp_error($handled)) {
+                    return $handled;
+                }
+                if ($handled === false) {
+                    return new WP_Error('mkt_event_handler_failed', 'The external event handler did not succeed.');
+                }
+                $updated = $wpdb->update(
+                    MKT_DB::table('inbox'),
+                    ['status' => 'processed', 'processed_at' => MKT_DB::now()],
+                    ['source' => sanitize_key($source), 'event_id' => $event_id, 'status' => 'received']
+                );
+                if ($updated !== 1) {
+                    return new WP_Error('mkt_event_acknowledgement_failed', 'The external event could not be acknowledged atomically.');
+                }
+                return true;
+            });
             if (is_wp_error($result)) {
                 throw new RuntimeException($result->get_error_message());
             }
-            $wpdb->update(MKT_DB::table('inbox'), ['status' => 'processed', 'processed_at' => MKT_DB::now()], ['source' => sanitize_key($source), 'event_id' => $event_id]);
             return true;
         } catch (Throwable $e) {
-            $wpdb->update(MKT_DB::table('inbox'), ['status' => 'failed'], ['source' => sanitize_key($source), 'event_id' => $event_id]);
+            $wpdb->update(MKT_DB::table('inbox'), ['status' => 'failed'], ['source' => sanitize_key($source), 'event_id' => $event_id, 'status' => 'received']);
             return new WP_Error('mkt_event_processing_failed', __('The event could not be processed.', 'marketplace'));
         }
     }
