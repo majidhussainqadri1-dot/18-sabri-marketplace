@@ -21,7 +21,7 @@ final class MKT_Commerce {
         }
         $amount = round((float) ($input['amount'] ?? 0), 2);
         $currency = MKT_DB::currency((string) ($input['currency'] ?? $listing['currency']));
-        if ($amount <= 0 || $currency !== $listing['currency']) {
+        if (!is_finite($amount) || $amount <= 0 || $currency !== $listing['currency']) {
             return new WP_Error('mkt_invalid_offer', __('Offer amount and currency are invalid.', 'marketplace'), ['status' => 422]);
         }
         $idempotency_key = self::idempotency_key($idempotency_key);
@@ -161,7 +161,7 @@ final class MKT_Commerce {
                     }
 
                     $amount = round((float) ($input['amount'] ?? 0), 2);
-                    if ($amount <= 0) {
+                    if (!is_finite($amount) || $amount <= 0) {
                         return new WP_Error('mkt_invalid_counter', __('Counter-offer amount is invalid.', 'marketplace'), ['status' => 422]);
                     }
                     $root = (int) ($offer['root_offer_id'] ?: $offer['id']);
