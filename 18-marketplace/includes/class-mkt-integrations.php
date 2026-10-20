@@ -13,7 +13,21 @@ final class MKT_Integrations {
     }
 
     public static function register_providers(): void {
+        // File 19 owns notification projection and delivery. Register this domain
+        // producer with File 19's actual sun.event.v1 contract when available.
+        self::register_notification_producer();
         do_action('mkt_contract_ready', MKT_Contracts::contract_manifest());
+    }
+
+    private static function register_notification_producer(): bool {
+        if (!function_exists('sun_register_notification_producer')) return false;
+        return (bool) sun_register_notification_producer('file-18-marketplace', [
+            'owner' => 'File 18',
+            'event_types' => ['Marketplace.*'],
+            'schema_versions' => ['1.0.0'],
+            'internal' => true,
+            'allowed_data_fields' => ['summary','status','object_name'],
+        ]);
     }
 
     public static function identity_assertions(int $user_id): array {
@@ -187,6 +201,34 @@ final class MKT_Integrations {
             'dedupe_key' => sanitize_text_field($dedupe_key),
             'context' => $context,
         ];
+        if (function_exists('sun_ingest_domain_event')) {
+            // Legacy sabri_notify_* shapes are not File 19's canonical contract.
+            // sun.event.v1 requires a registered owner, dotted fact name,
+            // immutable event ID, schema version, timestamp and recipients.
+            if (!self::register_notification_producer()) return false;
+            if (!preg_match('/^Marketplace([A-Za-z0-9]+)\\.v[0-9]+$/', (string) $event['event_type'], $matches)) {
+                return false;
+            }
+            $source_event = [
+                'producer' => 'file-18-marketplace',
+                'owner' => 'File 18',
+                'event_id' => sanitize_text_field($dedupe_key),
+                'event_type' => 'Marketplace.' . $matches[1],
+                'schema_version' => '1.0.0',
+                'occurred_at' => gmdate('c'),
+                'recipients' => [['user_id' => $user_id]],
+                'category' => 'marketplace',
+                'priority' => sanitize_key((string) $event['priority']),
+                'source_version' => MKT_CONTRACT_VERSION,
+                'idempotency_key' => sanitize_text_field($dedupe_key),
+                'trace_id' => MKT_Audit::trace_id(),
+                'deep_link' => esc_url_raw((string) ($context['url'] ?? '')),
+                'data' => ['summary' => sanitize_text_field((string) ($context['safe_summary'] ?? 'Marketplace update.'))],
+            ];
+            $receipt = sun_ingest_domain_event($source_event);
+            return !is_wp_error($receipt) && is_array($receipt)
+                && in_array((string) ($receipt['status'] ?? ''), ['processed','duplicate'], true);
+        }
         if (function_exists('sabri_notify_event')) return (bool) sabri_notify_event($event);
         if (function_exists('sabri_notify_user')) return (bool) sabri_notify_user($event);
         return (bool) apply_filters('sabri_notifications_ingest_event', false, $event);
