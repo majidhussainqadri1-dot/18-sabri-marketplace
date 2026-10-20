@@ -10,3 +10,7 @@
 - Actual deployed plugin, DB version and migration status: **UNKNOWN**.
 
 Never use old RC3 checksum with RC4. The correction report and remaining blockers are documented in the repository root at `docs/OCT-20-2026-40-SCOPE-STATIC-REVIEW.md`.
+
+## Second corrective pass — 20 October 2026
+
+Six newly found source defects repaired: deal INSERT ID lifetime, migration failure accounting, DB schema verification, File 17 same-origin scheme/port, browser Back full-origin validation, and File 19's actual canonical notification producer contract. An isolated File 19 PHP contract regression was added and a CI step configured for 40 repeated aggregate QA passes on each supported PHP matrix member. All production/staging evidence remains pending; see root `docs/OCT-20-2026-SECOND-40-SCOPE-CROSS-FILE-AUDIT.md`.
