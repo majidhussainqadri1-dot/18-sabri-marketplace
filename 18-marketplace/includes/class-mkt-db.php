@@ -413,6 +413,29 @@ final class MKT_DB {
         foreach ($sql as $statement) {
             dbDelta($statement);
         }
+        // dbDelta() issuing a statement is not proof that the target schema exists.
+        // Verify essential tables and version-critical columns before promoting the
+        // wp_options schema marker; otherwise retries are silently skipped.
+        $required_columns = [
+            'sellers' => ['id','user_id','status','version'],
+            'listings' => ['id','seller_id','public_id','status','version','published_at'],
+            'offers' => ['id','listing_id','idempotency_key','version'],
+            'deals' => ['id','accepted_offer_id','buyer_user_id','seller_user_id','version'],
+            'outbox' => ['id','event_id','status','available_at'],
+            'inbox' => ['id','source','event_id','payload_hash','status'],
+            'audit' => ['id','previous_hash','entry_hash'],
+            'migration_handoffs' => ['id','legacy_type','legacy_id','status'],
+        ];
+        foreach (self::TABLES as $name) {
+            if (!self::table_exists($name)) {
+                throw new RuntimeException('Marketplace schema installation incomplete: required table missing.');
+            }
+            if (!isset($required_columns[$name])) continue;
+            $columns = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name));
+            if (!is_array($columns) || array_diff($required_columns[$name], $columns)) {
+                throw new RuntimeException('Marketplace schema installation incomplete: required columns missing.');
+            }
+        }
         update_option('mkt_schema_version', MKT_SCHEMA_VERSION, false);
     }
 
