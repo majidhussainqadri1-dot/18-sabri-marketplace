@@ -107,5 +107,10 @@ assert_true(str_contains($listings, "'price' => round((float) ") &&
 assert_true(str_contains($policy, 'is_finite((float)') &&
     substr_count($commerce, '!is_finite($amount)') >= 2,
     'Listing, offer and counteroffer inputs explicitly reject non-finite monetary values.');
+assert_true(str_contains($listings, 'private static function validate_numeric_input(') &&
+    substr_count($listings, 'self::validate_numeric_input(') === 2,
+    'Both listing creation and edit validate the raw price before any numeric coercion.');
+assert_true(substr_count($commerce, "is_numeric($" . "input['amount'] ?? null)") === 2,
+    'Offer and counteroffer inputs reject partially numeric strings rather than casting them.');
 
 fwrite(STDOUT, "October forty-scope corrective invariants complete.\n");
