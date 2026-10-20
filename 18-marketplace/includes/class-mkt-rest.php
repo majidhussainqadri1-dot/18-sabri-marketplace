@@ -272,6 +272,23 @@ final class MKT_REST {
         $rate = MKT_Rate_Limiter::check($bucket);
         if (is_wp_error($rate)) return $rate;
         $scope = sanitize_key($bucket . '_' . strtolower($request->get_method()) . '_' . trim($request->get_route(), '/'));
+        // These native commands write owner state followed by mandatory audit and
+        // outbox facts; commit all three or none. Other buckets either manage their
+        // own transactions or perform external handoffs that cannot be rolled back.
+        $atomic_owner_commands = [
+            'create_listing','update_listing','submit_listing','transition_listing',
+            'transition_deal','transition_report','transition_dispute',
+        ];
+        if (in_array($bucket, $atomic_owner_commands, true)) {
+            $original = $callback;
+            $callback = static function() use ($original) {
+                try {
+                    return MKT_DB::transaction(static fn() => $original());
+                } catch (Throwable $e) {
+                    return new WP_Error('mkt_owner_transaction_failed', __('The marketplace change could not be saved safely.', 'marketplace'), ['status' => 503, 'trace_id' => MKT_Audit::trace_id()]);
+                }
+            };
+        }
         return MKT_Idempotency::run($scope, self::idempotency($request, $data), $data, $callback);
     }
 
