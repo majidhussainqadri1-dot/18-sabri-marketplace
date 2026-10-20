@@ -83,6 +83,20 @@ jobs:
         run: php 18-marketplace/tests/test-file19-notification-contract.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
+      - name: Forty counted full static and regression passes
+        if: github.head_ref == 'fix/file18-40-scope-audit-2026-10-20'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for round in $(seq 1 40); do
+            if ! bash 18-marketplace/tests/qa-static.sh > "$RUNNER_TEMP/file18-review-${round}.log" 2>&1; then
+              echo "FILE18_REVIEW_ROUND=${round} RESULT=FAIL"
+              cat "$RUNNER_TEMP/file18-review-${round}.log"
+              exit 1
+            fi
+            printf 'FILE18_REVIEW_ROUND=%02d RESULT=PASS PHP=%s HEAD=%s\\n' "$round" "${{ matrix.php }}" "${{ github.event.pull_request.head.sha }}"
+          done
+          echo 'FILE18_REVIEW_TOTAL=40 FILE18_REVIEW_PASSED=40 FILE18_REVIEW_FAILED=0'
       - name: Deterministic release build
         shell: bash
         run: |
