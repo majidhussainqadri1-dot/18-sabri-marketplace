@@ -26,3 +26,9 @@ Exact deployed code/version and live DB/schema/options/migration state have not 
 **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
 
 Do not merge, deploy, or mark resolved until evidence-backed staging acceptance and controlled live re-test.
+
+## Follow-up: second fresh 40-scope audit (20 October 2026)
+
+A second source-vs-plan/cross-file review corrected **six additional implementation defects** beyond the previous seven findings: committed-deal PK readback, migration reads/writes falsely reported complete, schema option promotion before table/column verification, File 17 full-origin conversation safety, full-origin Back navigation, and native File 19 `sun.event.v1` producer/event ingestion. An additional **test-only** PHP interpolation mistake was found and fixed separately.
+
+The review has **40 requirement-domain source checks**. Final GitHub CI additionally attempts **40 sequential complete static QA repetitions on PHP 8.1 and PHP 8.3**; do not state that the counted repetitions passed until the final-HEAD workflow logs say so. See `docs/OCT-20-2026-SECOND-40-SCOPE-CROSS-FILE-AUDIT.md`. No live release, staging acceptance or actual deployed/schema/migration parity has been established.
