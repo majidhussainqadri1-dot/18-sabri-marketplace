@@ -86,11 +86,19 @@ final class MKT_Events {
                     do_action('mkt_event', $event);
                 }
                 $local_ack = (bool) apply_filters('mkt_event_acknowledged', false, $event);
-                $notification_ack = self::send_derived_notifications($event);
-                $recipients = array_values(array_filter(array_unique(array_map('intval', (array) (($event['payload']['notify_user_ids'] ?? []))))));
-                $ok = $platform_ack || $local_ack || ($recipients && $notification_ack);
+                $recipient_ids = array_values(array_filter(array_unique(array_map('intval', (array) ($event['payload']['notify_user_ids'] ?? [])))));
+                // File 19 owns notifications. Acknowledgement from another event
+                // consumer cannot conceal a failed required notification handoff.
+                // The originating actor is not notified about their own action.
+                $notification_targets = array_values(array_filter($recipient_ids, static fn(int $uid): bool => $uid > 0 && $uid !== (int) ($event['actor_user_id'] ?? 0)));
+                $notification_required = !empty($notification_targets);
+                $notification_ack = $notification_required ? self::send_derived_notifications($event) : false;
+                $domain_ack = $platform_ack || $local_ack;
+                $ok = ($domain_ack || $notification_ack) && (!$notification_required || $notification_ack);
                 if (!$ok) {
-                    $error = 'No platform, local, or notification consumer acknowledged the event.';
+                    $error = $notification_required && !$notification_ack
+                        ? 'Required File 19 notification intake was not acknowledged.'
+                        : 'No platform, local, or notification consumer acknowledged the event.';
                 }
             } catch (Throwable $e) {
                 $error = mb_substr($e->getMessage(), 0, 240);
