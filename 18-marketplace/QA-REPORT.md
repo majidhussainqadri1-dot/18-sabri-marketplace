@@ -17,3 +17,7 @@ Regression enforcement: `tests/test-october-40-scope-regressions.php` runs withi
 Static source checks do not verify WordPress/MySQL behavior, staging install/upgrade, compatibility with real File 00/17/19/20/24/25/26, File 19 notification receipt under explicit `mkt_event_acknowledged` semantics, privacy export/erase, browser/RTL, mobile accessibility, load, real backup restore, rollback or live operation.
 
 **Remaining acceptance:** Staging and Founder approval, followed by controlled production rollout and live re-test. No production-ready assertion.
+
+## Source and cross-file audit extension (20 October 2026)
+
+The new independent File 18 review compared F18-FR-001…020, F18-NFR-001…010, and ten central/companion ownership boundaries and detected six additional implementation gaps. All six have source corrections on the corrective Draft PR. `tests/test-october-40-scope-regressions.php` additionally verifies deal ID, migration/schema and event boundary changes; `tests/test-file19-notification-contract.php` exercises the canonical File 19 producer and envelope through isolated public-function fixtures. The CI workflow now runs 40 sequential aggregate source/regression passes per PHP matrix member, evidence subject to final HEAD confirmation. No browser/WordPress/MySQL/deployed parity evidence is implied.
