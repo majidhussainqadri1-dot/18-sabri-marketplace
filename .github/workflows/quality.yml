@@ -79,6 +79,8 @@ jobs:
         run: test "$(cat "$RUNNER_TEMP/four-plan-${{ matrix.php }}.exit")" = '0'
       - name: October forty-scope corrective regressions
         run: php 18-marketplace/tests/test-october-40-scope-regressions.php
+      - name: File 19 notification contract
+        run: php 18-marketplace/tests/test-file19-notification-contract.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Deterministic release build
