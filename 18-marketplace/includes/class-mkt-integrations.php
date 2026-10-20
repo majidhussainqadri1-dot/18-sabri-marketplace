@@ -155,9 +155,17 @@ final class MKT_Integrations {
         // File 17 is an internal platform owner. A provider result may never turn the
         // Marketplace action into an open redirect or external deep-link handoff.
         $url = esc_url_raw((string) $result['url']);
-        $home_host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
-        $result_host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
-        if ($url === '' || $home_host === '' || $result_host === '' || !hash_equals($home_host, $result_host)) {
+        $home_parts = wp_parse_url(home_url('/'));
+        $target_parts = wp_parse_url($url);
+        $same_origin = is_array($home_parts) && is_array($target_parts)
+            && !empty($home_parts['host']) && !empty($target_parts['host'])
+            && !empty($home_parts['scheme']) && !empty($target_parts['scheme'])
+            && strtolower((string) $home_parts['scheme']) === strtolower((string) $target_parts['scheme'])
+            && hash_equals(strtolower((string) $home_parts['host']), strtolower((string) $target_parts['host']))
+            && (int) ($home_parts['port'] ?? (strtolower((string) $home_parts['scheme']) === 'https' ? 443 : 80))
+                === (int) ($target_parts['port'] ?? (strtolower((string) $target_parts['scheme']) === 'https' ? 443 : 80))
+            && !isset($target_parts['user']) && !isset($target_parts['pass']);
+        if ($url === '' || !$same_origin) {
             return new WP_Error('mkt_communication_url_invalid', __('Product-linked conversation returned an invalid destination.', 'marketplace'), ['status' => 503]);
         }
 
