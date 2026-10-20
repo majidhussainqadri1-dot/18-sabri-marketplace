@@ -64,6 +64,8 @@
 
 **F18-R5-03 — Non-durable idempotency response misreported as successful (FIXED IN REPOSITORY; LIVE UNVERIFIED).** `MKT_Idempotency::run` ignored return values of the completed/failed receipt UPDATE, allowing a mutation's apparent success while replay evidence was not safely stored. Now checks update count with processing CAS, returning safe 503 when persistence fails; does not blindly move uncertain owner mutation to a reusable failed state. **Remaining:** a 24-hour stale processing lease and mutations already committed before receipt failure require live reconciliation policy; this patch does not prove exactly-once semantics.
 
+**F18-R5-04 — Current File17 context card amount (FIXED IN REPOSITORY; LIVE UNVERIFIED).** Native File17 context rendering only accepts current provider projection fields; a constant generic summary omitted the File18 plan's required current listing price. It now projects currency, price and public-safe current status from the File18 canonical listing on every File17 context read, without copying private buyer/seller records. A changing-price regression verifies the next projection shows the new source amount.
+
 **New tests:** `test-file17-native-context-bridge.php` exercises actual File18 methods against simulated File17 owner REST responses, context authorization and provider outage; `test-idempotency-durable-receipt.php` injects UPDATE failure into the real File18 idempotency class. Both are included in aggregate `qa-static.sh` and direct PHP 8.1/8.3 CI steps. Existing File19 native contract/acknowledgement tests preserved. They are **simulations**, not real installed dual-plugin tests.
 
 ## Unresolved cross-file and production blockers
