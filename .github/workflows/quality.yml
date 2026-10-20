@@ -83,6 +83,8 @@ jobs:
         run: php 18-marketplace/tests/test-file19-notification-contract.php
       - name: Safety report atomicity fault injection
         run: php 18-marketplace/tests/test-report-atomicity.php
+      - name: Audit lock lifetime and nested transaction regression
+        run: php 18-marketplace/tests/test-audit-transaction-lock.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
