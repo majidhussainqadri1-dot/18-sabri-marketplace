@@ -236,7 +236,9 @@ final class MKT_Governance {
     public static function rest_seller_studio(WP_REST_Request $request) {
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'seller_studio']);
         if (is_wp_error($auth)) return $auth;
-        return rest_ensure_response(self::seller_studio(get_current_user_id()));
+        $studio = self::seller_studio(get_current_user_id());
+        if (empty($studio['available'])) return new WP_Error('mkt_seller_studio_unavailable', __('Seller Studio facts could not be verified.', 'marketplace'), ['status'=>503]);
+        return rest_ensure_response($studio);
     }
 
     public static function rest_create_recall(WP_REST_Request $request) {
@@ -515,11 +517,16 @@ final class MKT_Governance {
 
     public static function seller_studio(int $user_id): array {
         global $wpdb;
+        $unavailable = ['available'=>false, 'error'=>'seller_studio_sources_unavailable', 'inventory'=>[], 'listing_quality'=>['average_score'=>null, 'reviewed'=>null], 'reports'=>null, 'inquiries'=>['available'=>false], 'response_sla'=>['available'=>false]];
+        $wpdb->last_error = '';
         $seller = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('sellers') . ' WHERE user_id=%d', $user_id), ARRAY_A);
+        if ($wpdb->last_error !== '') return $unavailable;
         if (!$seller) {
             return ['available' => true, 'inventory' => [], 'listing_quality' => ['average_score' => 0, 'reviewed' => 0], 'reports' => 0, 'inquiries' => ['available' => false], 'response_sla' => ['available' => false]];
         }
+        $wpdb->last_error = '';
         $rows = $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('listings') . ' WHERE seller_id=%d ORDER BY id DESC LIMIT 200', (int) $seller['id']), ARRAY_A);
+        if (!is_array($rows) || $wpdb->last_error !== '') return $unavailable;
         $inventory = [];
         $scores = [];
         foreach ($rows as $row) {
@@ -530,7 +537,10 @@ final class MKT_Governance {
             if (mb_strlen(wp_strip_all_tags((string) $row['description'])) >= 80) $score += 25;
             if ((string) $row['category'] !== '') $score += 15;
             if ((string) $row['currency'] !== '' && (float) $row['price'] >= 0) $score += 15;
-            $media_count = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . MKT_DB::table('media_refs') . " WHERE listing_id=%d AND status='active' AND rights_status='approved' AND scan_status='clean'", (int) $row['id']));
+            $wpdb->last_error = '';
+            $media_count_raw = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . MKT_DB::table('media_refs') . " WHERE listing_id=%d AND status='active' AND rights_status='approved' AND scan_status='clean'", (int) $row['id']));
+            if ($media_count_raw === null || $wpdb->last_error !== '' || !ctype_digit((string)$media_count_raw)) return $unavailable;
+            $media_count = (int)$media_count_raw;
             if ($media_count > 0 || (string) $row['listing_type'] === 'service') $score += 15;
             $evidence = self::evidence_record((string) $row['public_id'], true);
             if ((string) $row['category'] !== 'homeopathic_medicines' || ($evidence && (string) $evidence['status'] === 'approved')) $score += 10;
@@ -542,7 +552,10 @@ final class MKT_Governance {
         if ($listing_ids) {
             $placeholders = implode(',', array_fill(0, count($listing_ids), '%s'));
             $sql = $wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('reports') . " WHERE target_type='listing' AND target_public_id IN ({$placeholders})", $listing_ids);
-            $reports = (int) $wpdb->get_var($sql);
+            $wpdb->last_error = '';
+            $reports_raw = $wpdb->get_var($sql);
+            if ($reports_raw === null || $wpdb->last_error !== '' || !ctype_digit((string)$reports_raw)) return $unavailable;
+            $reports = (int)$reports_raw;
         }
         $external = apply_filters('sabri_marketplace_seller_studio_metrics', ['inquiries' => ['available' => false], 'response_sla' => ['available' => false]], $user_id);
         return [
