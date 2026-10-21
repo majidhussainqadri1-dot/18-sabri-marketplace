@@ -211,6 +211,10 @@ final class MKT_Listings {
         if (is_wp_error($transition)) {
             return $transition;
         }
+        // Every entry point, including direct PHP/admin callers, must enforce the
+        // canonical language, regulated-evidence and recall publication gate.
+        $gate = MKT_Plan_Completion::publication_gate($public_id);
+        if (is_wp_error($gate)) return $gate;
         $policy = MKT_Policy::evaluate_listing($listing, MKT_Auth::assertions($user_id));
         if (!$policy['valid']) {
             return new WP_Error('mkt_listing_invalid', __('The listing did not pass policy validation.', 'marketplace'), ['status' => 422, 'errors' => $policy['errors']]);
@@ -263,6 +267,10 @@ final class MKT_Listings {
             return new WP_Error('mkt_stale_version', __('The listing changed. Reload and try again.', 'marketplace'), ['status' => 409]);
         }
         if ($to === 'active') {
+            // Publication invariants belong to the canonical listing transition,
+            // not only the REST wrapper. Native moderation and integrations use this path.
+            $gate = MKT_Plan_Completion::publication_gate($public_id);
+            if (is_wp_error($gate)) return $gate;
             $recall = MKT_Governance::recall_publication_guard($public_id);
             if (is_wp_error($recall)) return $recall;
             if ($recall) return new WP_Error('mkt_active_recall', __('This listing cannot be activated during an active recall.', 'marketplace'), ['status'=>409]);
