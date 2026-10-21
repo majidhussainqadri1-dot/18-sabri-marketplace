@@ -29,6 +29,16 @@ assert_true(str_contains($db, 'SELECT GET_LOCK') && str_contains($db, 'SELECT RE
 assert_true(str_contains($db, 'LIMIT 200') && str_contains($db, 'LIMIT 500'), 'Legacy migration reads are bounded by keyset batches.');
 assert_true(str_contains($admin, "'promotions_enabled' => 0"), 'Paid/donor promotion control is not user-enableable.');
 assert_true(str_contains($admin, "MKT_Auth::can('mkt_manage_policies'"), 'Marketplace policy writes revalidate high-trust authorization.');
+$policySaveStart = strpos($admin, 'public static function handle_policy_save');
+$policySaveEnd = strpos($admin, 'public static function render()', $policySaveStart);
+assert_true($policySaveStart !== false && $policySaveEnd > $policySaveStart, 'Admin policy save has an inspectable action boundary.');
+$policySave = substr($admin, $policySaveStart, $policySaveEnd - $policySaveStart);
+assert_true(str_contains($policySave, 'MKT_DB::transaction(static function()') &&
+    str_contains($policySave, 'mkt_policy_insert_failed') &&
+    str_contains($policySave, "if ($" . "retired === false)") &&
+    str_contains($policySave, "MKT_Audit::record('policy_version_created'"),
+    'Retire, insert and mandatory policy audit are one fail-closed local owner transaction.');
+
 assert_true(str_contains($contracts, "'access_tier' => 'single_free'") && str_contains($contracts, "'donation_advantage' => false") && str_contains($contracts, "'paid_ranking' => false"), 'Single-free-tier and non-privilege business laws are machine-readable.');
 assert_true(!str_contains($listings, "ORDER BY (l.featured_label<>''") && str_contains($listings, 'ORDER BY l.published_at DESC,l.id DESC'), 'Default native discovery cannot privilege a featured/donor/paid label.');
 assert_true(str_contains($idem, 'mkt_idempotency_outcome_uncertain') && str_contains($idem, "status='failed' AND request_hash=%s"), 'Unknown stale mutations block blind re-execution while verified failures retain CAS retry.');
