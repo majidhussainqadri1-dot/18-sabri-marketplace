@@ -8,6 +8,7 @@ class SchemaDB {
  public bool $tables_ok=true;
  public bool $columns_ok=false;
  public bool $indexes_ok=true;
+ public bool $composite_unique=false;
  public int $delta_calls=0;
  public function esc_like(string $x):string{return $x;}
  public function get_charset_collate():string{return 'DEFAULT CHARACTER SET utf8mb4';}
@@ -33,6 +34,7 @@ class SchemaDB {
    ['Key_name'=>'PRIMARY','Non_unique'=>0,'Column_name'=>'id','Seq_in_index'=>1],
    ['Key_name'=>$unique,'Non_unique'=>$this->indexes_ok?0:1,'Column_name'=>$unique,'Seq_in_index'=>1],
   ];
+  if($this->composite_unique)$index[]=['Key_name'=>$unique,'Non_unique'=>0,'Column_name'=>'other_id','Seq_in_index'=>2];
   return $index;
  }
 }
@@ -56,6 +58,9 @@ assert_same('1.0.0',$GLOBALS['options']['mkt_governance_schema_version'],'Schema
 assert_true(!isset($GLOBALS['options']['mkt_governance_schema_error']),'Successful repair clears previous migration failure marker.');
 assert_same(true,MKT_Governance::schema_ready(),'Repaired actual database state verifies.');
 
+$wpdb->composite_unique=true;
+assert_same(false,MKT_Governance::schema_ready(),'A composite unique index starting with public_id is NOT sufficient to guarantee unique public identity.');
+$wpdb->composite_unique=false;
 $wpdb->indexes_ok=false;
 assert_same(false,MKT_Governance::schema_ready(),'Required columns without unique indexes cannot prove owner schema integrity.');
 MKT_Governance::maybe_upgrade();
