@@ -1,6 +1,7 @@
 <?php
 /** Schema truth: an option must never attest tables/columns not actually deployed. */
 require __DIR__.'/bootstrap.php';
+define('ARRAY_A','ARRAY_A');
 class SchemaDB {
  public string $prefix='wp_';
  public string $last_error='';
