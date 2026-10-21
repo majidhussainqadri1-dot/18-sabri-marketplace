@@ -67,8 +67,8 @@ final class MKT_Integrations {
                 'status' => (string) smc_user_status($user_id),
                 'platform_uuid' => is_array($profile) ? (string) ($profile['platform_uuid'] ?? '') : '',
                 'age' => is_array($profile) && isset($profile['age']) ? (int) $profile['age'] : null,
-                'is_minor' => is_array($profile) && array_key_exists('is_minor', $profile) ? (bool) $profile['is_minor'] : null,
-                'guardian_verified' => is_array($profile) && !empty($profile['guardian_verified']),
+                'is_minor' => is_array($profile) && array_key_exists('is_minor', $profile) ? filter_var($profile['is_minor'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) : null,
+                'guardian_verified' => is_array($profile) && self::identity_true($profile['guardian_verified'] ?? false),
                 'risk_state' => is_array($profile) ? (string) ($profile['risk_state'] ?? 'unknown') : 'unknown',
                 'capabilities' => is_array($profile) && isset($profile['capabilities']) && is_array($profile['capabilities']) ? $profile['capabilities'] : [],
                 'roles' => is_array($profile) && isset($profile['roles']) && is_array($profile['roles']) ? $profile['roles'] : [],
@@ -115,7 +115,7 @@ final class MKT_Integrations {
         $assertions['verified'] = array_key_exists('verified', $raw)
             ? self::identity_true($raw['verified'])
             : $assertions['status'] === 'verified';
-        $assertions['suspended'] = !empty($assertions['suspended']) || in_array($assertions['status'], ['suspended','banned','revoked'], true);
+        $assertions['suspended'] = self::identity_true($assertions['suspended']) || in_array($assertions['status'], ['suspended','banned','revoked'], true);
         $assertions['guardian_verified'] = self::identity_true($assertions['guardian_verified']);
         if ($assertions['is_minor'] !== null) {
             $parsed_minor = filter_var($assertions['is_minor'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
