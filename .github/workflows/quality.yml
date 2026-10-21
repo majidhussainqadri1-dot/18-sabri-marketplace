@@ -141,6 +141,10 @@ jobs:
         run: php 18-marketplace/tests/test-rc18-core-publication-gates.php
       - name: RC18 independent language-facets migration truth
         run: php 18-marketplace/tests/test-rc18-facet-schema-truth.php
+      - name: RC19 policy seeding transactional rollback and approved higher version
+        run: php 18-marketplace/tests/test-rc19-policy-seeding-rollback.php
+      - name: RC19 immutable medicine and zero-commission policy floor
+        run: php 18-marketplace/tests/test-rc19-immutable-policy-floor.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
@@ -163,16 +167,16 @@ jobs:
           set -euo pipefail
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-a"
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
-          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC18.zip"
-          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC18.zip"
+          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC19.zip"
+          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC19.zip"
           cmp "$A" "$B"
           unzip -t "$A"
           HASH_A="$(sha256sum "$A" | awk '{print $1}')"
           HASH_B="$(sha256sum "$B" | awk '{print $1}')"
           test "$HASH_A" = "$HASH_B"
-          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC18.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC18.zip.sha256"
+          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC19.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC19.zip.sha256"
           {
-            echo '### File 18 Marketplace 2.1.0 RC18'
+            echo '### File 18 Marketplace 2.1.0 RC19'
             echo
             echo "SHA-256: \`$HASH_A\`"
             echo
@@ -181,9 +185,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.php == '8.3'
         with:
-          name: file18-marketplace-2.1.0-rc18
+          name: file18-marketplace-2.1.0-rc19
           path: |
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC18.zip
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC18.zip.sha256
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC19.zip
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC19.zip.sha256
           if-no-files-found: error
           retention-days: 14

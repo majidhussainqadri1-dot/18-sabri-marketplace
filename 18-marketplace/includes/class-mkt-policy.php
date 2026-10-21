@@ -3,7 +3,7 @@ defined('ABSPATH') || exit;
 
 final class MKT_Policy {
     public static function seed_builtin_policies(): void {
-        if (get_option('mkt_builtin_policy_version') === MKT_VERSION . '-categories-4' || !MKT_DB::table_exists('policies')) return;
+        if (get_option('mkt_builtin_policy_version') === MKT_VERSION . '-categories-5' || !MKT_DB::table_exists('policies')) return;
         global $wpdb;
         $now = MKT_DB::now();
         $policies = [
@@ -32,27 +32,63 @@ final class MKT_Policy {
         ];
         foreach ($policies as $policy) {
             $version = (int) ($policy['version'] ?? 1);
-            $wpdb->last_error = '';
-            $exists = $wpdb->get_var($wpdb->prepare(
-                'SELECT id FROM ' . MKT_DB::table('policies') . ' WHERE policy_type=%s AND policy_key=%s AND jurisdiction=%s AND version=%d',
-                $policy['policy_type'], $policy['policy_key'], 'GLOBAL', $version
-            ));
-            if ($wpdb->last_error !== '') return; // Never mark incomplete policy seeding complete.
-            if ($exists) continue;
-            if ($version > 1) {
-                $retired = $wpdb->update(MKT_DB::table('policies'), ['status'=>'retired','updated_at'=>$now], [
-                    'policy_type'=>$policy['policy_type'],'policy_key'=>$policy['policy_key'],'jurisdiction'=>'GLOBAL','status'=>'active',
-                ]);
-                if ($retired === false) return;
+            // A failed INSERT must never leave an approved safety policy retired.
+            // Keep the immutable version check, optional prior retirement and
+            // new row creation in one owner transaction with rollback on failure.
+            try {
+                $result = MKT_DB::transaction(static function() use ($wpdb, $policy, $version, $now) {
+                    $table = MKT_DB::table('policies');
+                    $wpdb->last_error = '';
+                    $exists = $wpdb->get_var($wpdb->prepare(
+                        'SELECT id FROM ' . $table . ' WHERE policy_type=%s AND policy_key=%s AND jurisdiction=%s AND version=%d',
+                        $policy['policy_type'], $policy['policy_key'], 'GLOBAL', $version
+                    ));
+                    if ($wpdb->last_error !== '') {
+                        return new WP_Error('mkt_policy_seed_lookup_failed', 'Marketplace policy version could not be checked.');
+                    }
+                    if ($exists) return true;
+                    // An approved higher policy version belongs to the policy
+                    // owner. Built-in re-seeding must never downgrade it.
+                    $wpdb->last_error = '';
+                    $latest = $wpdb->get_var($wpdb->prepare(
+                        'SELECT MAX(version) FROM ' . $table . ' WHERE policy_type=%s AND policy_key=%s AND jurisdiction=%s',
+                        $policy['policy_type'], $policy['policy_key'], 'GLOBAL'
+                    ));
+                    if ($wpdb->last_error !== '') {
+                        return new WP_Error('mkt_policy_seed_lookup_failed', 'Marketplace policy history could not be checked.');
+                    }
+                    if ($latest !== null && (int) $latest > $version) return true;
+                    if ($version > 1) {
+                        $retired = $wpdb->update($table, ['status'=>'retired','updated_at'=>$now], [
+                            'policy_type'=>$policy['policy_type'],'policy_key'=>$policy['policy_key'],'jurisdiction'=>'GLOBAL','status'=>'active',
+                        ]);
+                        if ($retired === false) {
+                            return new WP_Error('mkt_policy_seed_retire_failed', 'Marketplace policy version could not be safely retired.');
+                        }
+                    }
+                    $inserted = $wpdb->insert($table, [
+                        'public_id'=>MKT_DB::uuid(),'policy_type'=>$policy['policy_type'],'policy_key'=>$policy['policy_key'],'jurisdiction'=>'GLOBAL',
+                        'version'=>$version,'status'=>'active','rules_json'=>wp_json_encode($policy['rules']),'created_by'=>0,'approved_by'=>0,
+                        'effective_at'=>$now,'created_at'=>$now,'updated_at'=>$now,
+                    ]);
+                    return $inserted === 1 ? true : new WP_Error('mkt_policy_seed_insert_failed', 'Marketplace policy version could not be installed.');
+                });
+            } catch (Throwable $e) {
+                return; // Preserve previous version truth; retry only after repair.
             }
-            $inserted = $wpdb->insert(MKT_DB::table('policies'), [
-                'public_id'=>MKT_DB::uuid(),'policy_type'=>$policy['policy_type'],'policy_key'=>$policy['policy_key'],'jurisdiction'=>'GLOBAL',
-                'version'=>$version,'status'=>'active','rules_json'=>wp_json_encode($policy['rules']),'created_by'=>0,'approved_by'=>0,
-                'effective_at'=>$now,'created_at'=>$now,'updated_at'=>$now,
-            ]);
-            if ($inserted !== 1) return; // Retry on next seed; never claim partial data is complete.
+            if ($result !== true) return;
         }
-        update_option('mkt_builtin_policy_version', MKT_VERSION . '-categories-4', false);
+        update_option('mkt_builtin_policy_version', MKT_VERSION . '-categories-5', false);
+    }
+
+    /** Constitutional business facts cannot be overridden by mutable policy JSON. */
+    public static function valid_zero_commission_policy(array $rules): bool {
+        return isset($rules['commission_percent'])
+            && is_numeric($rules['commission_percent'])
+            && (float)$rules['commission_percent'] === 0.0
+            && array_key_exists('donation_advantage', $rules) && $rules['donation_advantage'] === false
+            && array_key_exists('hidden_fees', $rules) && $rules['hidden_fees'] === false
+            && array_key_exists('escrow_guarantee', $rules) && $rules['escrow_guarantee'] === false;
     }
 
     public static function categories(): array {
@@ -105,6 +141,15 @@ final class MKT_Policy {
             // finish the draft. Submission/publication is fail-closed separately by
             // MKT_Plan_Completion::publication_gate().
             if (!empty($rules['requires_structured_evidence'])) $holds[] = 'structured_evidence_review';
+        }
+
+        // The medical safety floor is immutable even when a later policy row
+        // is malformed or a privileged operator mistakenly relaxes its flags.
+        if ($category === 'homeopathic_medicines' && (!$category_policy
+            || empty($category_policy['rules']['requires_human_review'])
+            || empty($category_policy['rules']['requires_verified_professional'])
+            || empty($category_policy['rules']['requires_structured_evidence']))) {
+            $errors[] = ['code'=>'regulated_policy_unavailable','message'=>__('The mandatory medicine review and professional evidence requirements are unavailable.', 'marketplace')];
         }
 
         $prohibited = self::active('prohibited', 'global_prohibited_goods_services');

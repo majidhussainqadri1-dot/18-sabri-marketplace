@@ -15,6 +15,7 @@ final class MKT_DB {
   public static function table_exists(string $name):bool{return true;}
   public static function now():string{return '2026-10-22 00:00:00';}
   public static function uuid():string{return 'id-'.(++self::$sequence);}
+  public static function transaction(callable $callback){return $callback();}
 }
 final class MKT_Contracts {public static function allowed_currencies():array{return ['PKR'];}}
 class PolicyFailureDB {
@@ -80,5 +81,5 @@ assert_same(false,get_option('mkt_builtin_policy_version',false),'Policy INSERT 
 $wpdb->failed_seed_write=false;$wpdb->insert_count=0;
 MKT_Policy::seed_builtin_policies();
 assert_true($wpdb->insert_count>=10,'Healthy seed populates actual governed policy rows.');
-assert_same('2.1.0-categories-4',get_option('mkt_builtin_policy_version'),'Only successful complete seed advances canonical policy marker.');
+assert_same('2.1.0-categories-5',get_option('mkt_builtin_policy_version'),'Only successful complete seed advances canonical policy marker.');
 fwrite(STDOUT,"RC17 fail-closed prohibited policy and policy-seeding failures verified.\n");
