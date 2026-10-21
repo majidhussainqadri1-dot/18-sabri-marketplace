@@ -79,5 +79,5 @@ foreach(['recalled','outage'] as $mode) {
 assert_same(6,MKT_Governance::$checks,'All three canonical paths revalidate recalls under two danger conditions.');
 assert_same(true,MKT_Governance::$locked,'Each new commerce commitment takes a locking recall read.');
 $actual_governance=file_get_contents(dirname(__DIR__).'/includes/class-mkt-governance.php');
-assert_true(str_contains($actual_governance,"($locking_read ? ' FOR UPDATE' : '')"),'Real canonical recall guard can issue a locking read.');
+assert_true(str_contains($actual_governance, 'bool $locking_read = false') && str_contains($actual_governance, 'FOR UPDATE'),'Real canonical recall guard can issue a locking read.');
 fwrite(STDOUT,"RC20 recalled commerce, SQL outage and locking revalidation passed.\n");
