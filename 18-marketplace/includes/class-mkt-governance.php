@@ -670,14 +670,14 @@ final class MKT_Governance {
     }
 
     /** Fail closed on an unavailable recall owner table or uncertain SQL read. */
-    public static function recall_publication_guard(string $listing_public_id): bool|WP_Error {
+    public static function recall_publication_guard(string $listing_public_id, bool $locking_read = false): bool|WP_Error {
         if (!self::table_exists('recalls')) {
             return new WP_Error('mkt_recall_verification_unavailable', __('Recall information cannot be verified. Publication is paused.', 'marketplace'), ['status'=>503]);
         }
         global $wpdb;
         $wpdb->last_error = '';
         $row = $wpdb->get_row($wpdb->prepare(
-            "SELECT public_id FROM " . self::table('recalls') . " WHERE listing_public_id=%s AND status='active' LIMIT 1",
+            "SELECT public_id FROM " . self::table('recalls') . " WHERE listing_public_id=%s AND status='active' LIMIT 1" . ($locking_read ? ' FOR UPDATE' : ''),
             $listing_public_id
         ), ARRAY_A);
         if ($wpdb->last_error !== '' || ($row !== null && !is_array($row))) {
