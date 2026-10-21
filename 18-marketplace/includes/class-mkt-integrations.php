@@ -48,6 +48,10 @@ final class MKT_Integrations {
             'is_minor' => null,
             'guardian_verified' => false,
             'risk_state' => 'unknown',
+            'file00_eligible' => false,
+            'file00_marketplace_scope_verified' => false,
+            'file00_marketplace_seller_allowed' => false,
+            'file00_marketplace_deal_allowed' => false,
             'capabilities' => [],
             'roles' => [],
             'version' => '',
@@ -59,6 +63,49 @@ final class MKT_Integrations {
         if (!is_array($raw) && function_exists('smc_get_marketplace_assertions')) {
             $raw = smc_get_marketplace_assertions($user_id);
         }
+        // File00's actual repository-level canonical contract is
+        // SMC_Contracts::assertions() with scoped clinical_commerce decisions,
+        // not necessarily a separate smc_get_marketplace_assertions() function.
+        if (!is_array($raw) && class_exists('SMC_Contracts') && is_callable(['SMC_Contracts','assertions'])) {
+            try {
+                $source = SMC_Contracts::assertions($user_id);
+            } catch (Throwable $e) {
+                // No generic/legacy fallback can turn a failed canonical identity
+                // owner read into permission. Do not leak identity-provider errors.
+                return $empty;
+            }
+            if (is_array($source)) {
+                $commerce = (array) ($source['clinical_commerce'] ?? []);
+                $age = (array) ($source['age_context'] ?? []);
+                $scope_known = array_key_exists('marketplace_seller_actions_allowed', $commerce)
+                    && array_key_exists('marketplace_direct_deal_allowed', $commerce);
+                $raw = [
+                    'available' => true,
+                    'compatible' => $scope_known,
+                    'status' => (string) ($source['status'] ?? 'unknown'),
+                    'approved' => self::identity_true($source['approved'] ?? false),
+                    'verified' => self::identity_true($source['identity_documents_current'] ?? false),
+                    'suspended' => self::identity_true($source['suspended'] ?? false),
+                    'is_minor' => self::identity_true($age['known'] ?? false)
+                        ? self::identity_true($age['minor'] ?? false) : null,
+                    'guardian_verified' => self::identity_true($source['guardian_verified'] ?? false),
+                    'risk_state' => (string) ($source['risk_state'] ?? 'unknown'),
+                    'file00_eligible' => self::identity_true($source['eligible'] ?? false),
+                    'file00_marketplace_scope_verified' => $scope_known,
+                    'file00_marketplace_seller_allowed' => $scope_known && self::identity_true($commerce['marketplace_seller_actions_allowed']),
+                    'file00_marketplace_deal_allowed' => $scope_known && self::identity_true($commerce['marketplace_direct_deal_allowed']),
+                    // These are owner-signed domain permissions, not invented
+                    // marketplace powers or broad WordPress role grants.
+                    'capabilities' => array_merge(
+                        $scope_known && self::identity_true($commerce['marketplace_seller_actions_allowed']) ? ['mkt_sell'] : [],
+                        $scope_known && self::identity_true($commerce['marketplace_direct_deal_allowed']) ? ['mkt_buy'] : []
+                    ),
+                    'roles' => [],
+                    'version' => sanitize_text_field((string) ($source['contract_version'] ?? '')),
+                    'contract_mode' => 'file00_smc_contract',
+                ];
+            }
+        }
         if (!is_array($raw) && function_exists('smc_get_profile') && function_exists('smc_user_status')) {
             $profile = smc_get_profile($user_id);
             $raw = [
@@ -67,8 +114,8 @@ final class MKT_Integrations {
                 'status' => (string) smc_user_status($user_id),
                 'platform_uuid' => is_array($profile) ? (string) ($profile['platform_uuid'] ?? '') : '',
                 'age' => is_array($profile) && isset($profile['age']) ? (int) $profile['age'] : null,
-                'is_minor' => is_array($profile) && array_key_exists('is_minor', $profile) ? (bool) $profile['is_minor'] : null,
-                'guardian_verified' => is_array($profile) && !empty($profile['guardian_verified']),
+                'is_minor' => is_array($profile) && array_key_exists('is_minor', $profile) ? filter_var($profile['is_minor'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) : null,
+                'guardian_verified' => is_array($profile) && self::identity_true($profile['guardian_verified'] ?? false),
                 'risk_state' => is_array($profile) ? (string) ($profile['risk_state'] ?? 'unknown') : 'unknown',
                 'capabilities' => is_array($profile) && isset($profile['capabilities']) && is_array($profile['capabilities']) ? $profile['capabilities'] : [],
                 'roles' => is_array($profile) && isset($profile['roles']) && is_array($profile['roles']) ? $profile['roles'] : [],
@@ -115,7 +162,7 @@ final class MKT_Integrations {
         $assertions['verified'] = array_key_exists('verified', $raw)
             ? self::identity_true($raw['verified'])
             : $assertions['status'] === 'verified';
-        $assertions['suspended'] = !empty($assertions['suspended']) || in_array($assertions['status'], ['suspended','banned','revoked'], true);
+        $assertions['suspended'] = self::identity_true($assertions['suspended']) || in_array($assertions['status'], ['suspended','banned','revoked'], true);
         $assertions['guardian_verified'] = self::identity_true($assertions['guardian_verified']);
         if ($assertions['is_minor'] !== null) {
             $parsed_minor = filter_var($assertions['is_minor'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);

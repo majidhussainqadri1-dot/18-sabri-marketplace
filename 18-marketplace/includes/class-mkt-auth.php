@@ -23,10 +23,30 @@ final class MKT_Auth {
         if (!$assertions['approved'] || !$assertions['verified'] || $assertions['suspended']) {
             return new WP_Error('mkt_account_not_eligible', __('An approved and verified account is required for this action.', 'marketplace'), ['status' => 403]);
         }
-        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)) {
-            return new WP_Error('mkt_account_risk_hold', __('This action is unavailable while the account is under a marketplace risk hold.', 'marketplace'), ['status' => 403]);
+        // The canonical File00 owner must positively classify risk and
+        // minor/guardian state. Unknown is not a verified adult/no-risk grant.
+        $file00_scoped = ($assertions['contract_mode'] ?? '') === 'file00_smc_contract';
+        if ($file00_scoped) {
+            // Scoped permissions are authoritative File00 decisions, not a
+            // generic WordPress mkt_* capability or optimistic risk shortcut.
+            if (!$assertions['file00_marketplace_scope_verified'] || !$assertions['file00_eligible']) {
+                return new WP_Error('mkt_account_not_eligible', __('Marketplace eligibility was not confirmed by the identity owner.', 'marketplace'), ['status'=>403]);
+            }
+            if ($capability === 'mkt_sell' && !$assertions['file00_marketplace_seller_allowed']) {
+                return new WP_Error('mkt_file00_marketplace_scope_denied', __('The identity owner does not permit seller operations.', 'marketplace'), ['status'=>403]);
+            }
+            if ($capability === 'mkt_buy' && !$assertions['file00_marketplace_deal_allowed']) {
+                return new WP_Error('mkt_file00_marketplace_scope_denied', __('The identity owner does not permit direct marketplace deals.', 'marketplace'), ['status'=>403]);
+            }
         }
-        if (!empty($assertions['is_minor']) && empty($assertions['guardian_verified'])) {
+        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)
+            || ((string) $assertions['risk_state'] === 'unknown' && !$file00_scoped)) {
+            return new WP_Error('mkt_account_risk_hold', __('Marketplace risk verification is required for this action.', 'marketplace'), ['status' => 403]);
+        }
+        if ($assertions['is_minor'] === null) {
+            return new WP_Error('mkt_age_verification_required', __('Marketplace age and guardian eligibility could not be verified.', 'marketplace'), ['status' => 403]);
+        }
+        if ($assertions['is_minor'] === true && !$assertions['guardian_verified']) {
             return new WP_Error('mkt_guardian_required', __('Verified guardian consent is required for this action.', 'marketplace'), ['status' => 403]);
         }
 
@@ -60,11 +80,19 @@ final class MKT_Auth {
         if ($assertions['suspended']) {
             $reasons[] = 'account_suspended';
         }
-        if (!empty($assertions['is_minor']) && empty($assertions['guardian_verified'])) {
+        if ($assertions['is_minor'] === null) {
+            $reasons[] = 'age_guardian_unverified';
+        } elseif ($assertions['is_minor'] === true && !$assertions['guardian_verified']) {
             $reasons[] = 'guardian_unverified';
         }
-        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)) {
+        $file00_scoped = ($assertions['contract_mode'] ?? '') === 'file00_smc_contract';
+        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)
+            || ((string) $assertions['risk_state'] === 'unknown' && !$file00_scoped)) {
             $reasons[] = 'risk_hold';
+        }
+        if ($file00_scoped && (!$assertions['file00_marketplace_scope_verified'] || !$assertions['file00_eligible']
+            || !$assertions['file00_marketplace_seller_allowed'])) {
+            $reasons[] = 'file00_marketplace_seller_denied';
         }
         $eligible = !$reasons && (user_can($user_id, 'mkt_sell') || in_array('mkt_sell', (array) $assertions['capabilities'], true) || apply_filters('mkt_seller_eligibility', false, $user_id, $assertions));
         if (!$eligible && !$reasons) {

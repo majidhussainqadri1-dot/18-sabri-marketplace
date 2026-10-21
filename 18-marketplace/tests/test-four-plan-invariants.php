@@ -22,7 +22,9 @@ $dashboard_template = file_get_contents($root . '/templates/dashboard.php');
 $sell_template = file_get_contents($root . '/templates/sell.php');
 
 assert_true(str_contains($auth, "!\$assertions['verified']"), 'Protected Marketplace actions require verified identity.');
-assert_true(str_contains($auth, "['blocked','high','critical']"), 'Protected actions fail closed on high-risk states.');
+assert_true(str_contains($auth, "['blocked','high','critical']") && str_contains($auth, "=== 'unknown' && !\$file00_scoped")
+    && str_contains($auth, "mkt_age_verification_required") && str_contains($auth, "file00_marketplace_seller_allowed"),
+    'Protected actions fail closed on high-risk state and unverified minor eligibility; only positive scoped File00 owner permission handles omitted general risk signal.');
 assert_true(str_contains($integration, "array_key_exists('available', \$raw)") && str_contains($integration, "\$assertions['contract_mode'] = 'malformed'") && str_contains($integration, "\$assertions['available'] = false"), 'Identity contract preserves explicit unavailability and rejects malformed status.');
 assert_true(str_contains($commerce, "MKT_Auth::can('mkt_review_disputes'"), 'Dispute-reviewer deal access revalidates current identity state.');
 assert_true(str_contains($db, 'SELECT GET_LOCK') && str_contains($db, 'SELECT RELEASE_LOCK'), 'Upgrade concurrency uses an atomic connection-owned database lock.');
