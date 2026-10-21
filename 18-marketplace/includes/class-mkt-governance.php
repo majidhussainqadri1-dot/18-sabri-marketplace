@@ -62,13 +62,19 @@ final class MKT_Governance {
             $wpdb->last_error = '';
             $indexes = $wpdb->get_results('SHOW INDEX FROM ' . self::table($name), ARRAY_A);
             if (!is_array($indexes) || $wpdb->last_error !== '') return false;
-            $unique = [];
+            $keys = [];
             foreach ($indexes as $index) {
-                if ((int) ($index['Non_unique'] ?? 1) !== 0 || (int) ($index['Seq_in_index'] ?? 0) !== 1) continue;
-                $unique[(string) ($index['Key_name'] ?? '')] = (string) ($index['Column_name'] ?? '');
+                $key = (string) ($index['Key_name'] ?? '');
+                $seq = (int) ($index['Seq_in_index'] ?? 0);
+                if ($key === '' || $seq < 1) continue;
+                if ((int) ($index['Non_unique'] ?? 1) !== 0) continue;
+                $keys[$key][$seq] = (string) ($index['Column_name'] ?? '');
             }
             $required_unique = $name === 'listing_evidence' ? 'listing_public_id' : 'public_id';
-            if (($unique['PRIMARY'] ?? '') !== 'id' || ($unique[$required_unique] ?? '') !== $required_unique) return false;
+            // A UNIQUE KEY (public_id, extra_column) does NOT constrain
+            // public_id itself; accepting only its first index column is unsafe.
+            if (($keys['PRIMARY'] ?? []) !== [1 => 'id']
+                || ($keys[$required_unique] ?? []) !== [1 => $required_unique]) return false;
         }
         return true;
     }
