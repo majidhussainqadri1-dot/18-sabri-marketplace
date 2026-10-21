@@ -25,7 +25,22 @@ final class MKT_Auth {
         }
         // The canonical File00 owner must positively classify risk and
         // minor/guardian state. Unknown is not a verified adult/no-risk grant.
-        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical','unknown'], true)) {
+        $file00_scoped = ($assertions['contract_mode'] ?? '') === 'file00_smc_contract';
+        if ($file00_scoped) {
+            // Scoped permissions are authoritative File00 decisions, not a
+            // generic WordPress mkt_* capability or optimistic risk shortcut.
+            if (!$assertions['file00_marketplace_scope_verified'] || !$assertions['file00_eligible']) {
+                return new WP_Error('mkt_account_not_eligible', __('Marketplace eligibility was not confirmed by the identity owner.', 'marketplace'), ['status'=>403]);
+            }
+            if ($capability === 'mkt_sell' && !$assertions['file00_marketplace_seller_allowed']) {
+                return new WP_Error('mkt_file00_marketplace_scope_denied', __('The identity owner does not permit seller operations.', 'marketplace'), ['status'=>403]);
+            }
+            if ($capability === 'mkt_buy' && !$assertions['file00_marketplace_deal_allowed']) {
+                return new WP_Error('mkt_file00_marketplace_scope_denied', __('The identity owner does not permit direct marketplace deals.', 'marketplace'), ['status'=>403]);
+            }
+        }
+        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)
+            || ((string) $assertions['risk_state'] === 'unknown' && !$file00_scoped)) {
             return new WP_Error('mkt_account_risk_hold', __('Marketplace risk verification is required for this action.', 'marketplace'), ['status' => 403]);
         }
         if ($assertions['is_minor'] === null) {
@@ -70,8 +85,14 @@ final class MKT_Auth {
         } elseif ($assertions['is_minor'] === true && !$assertions['guardian_verified']) {
             $reasons[] = 'guardian_unverified';
         }
-        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical','unknown'], true)) {
+        $file00_scoped = ($assertions['contract_mode'] ?? '') === 'file00_smc_contract';
+        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)
+            || ((string) $assertions['risk_state'] === 'unknown' && !$file00_scoped)) {
             $reasons[] = 'risk_hold';
+        }
+        if ($file00_scoped && (!$assertions['file00_marketplace_scope_verified'] || !$assertions['file00_eligible']
+            || !$assertions['file00_marketplace_seller_allowed'])) {
+            $reasons[] = 'file00_marketplace_seller_denied';
         }
         $eligible = !$reasons && (user_can($user_id, 'mkt_sell') || in_array('mkt_sell', (array) $assertions['capabilities'], true) || apply_filters('mkt_seller_eligibility', false, $user_id, $assertions));
         if (!$eligible && !$reasons) {
