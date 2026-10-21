@@ -111,6 +111,8 @@ jobs:
         run: php 18-marketplace/tests/test-core-schema-truth.php
       - name: File 17 legacy-only conversation/message migration negative tests
         run: php 18-marketplace/tests/test-file17-legacy-only-migration.php
+      - name: Conditional CF05 analytics ownership does not duplicate File18 truth
+        run: php 18-marketplace/tests/test-cf05-conditional-boundary.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
