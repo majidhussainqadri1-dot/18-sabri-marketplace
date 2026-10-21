@@ -64,7 +64,7 @@ final class MKT_Finalization {
         global $wpdb;
         $limit = min(50, max(1, (int) ($filters['limit'] ?? 20)));
         $cursor = max(0, (int) ($filters['cursor'] ?? 0));
-        $where = ["l.status='active'", "s.status='approved'"];
+        $where = ["l.status='active'", "s.status='approved'", "l.expires_at>UTC_TIMESTAMP()"];
         $params = [];
 
         $category = sanitize_key((string) ($filters['category'] ?? ''));
