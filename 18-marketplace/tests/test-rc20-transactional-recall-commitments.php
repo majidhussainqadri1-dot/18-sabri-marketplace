@@ -3,6 +3,7 @@
 require __DIR__.'/bootstrap.php';
 defined('ARRAY_A') || define('ARRAY_A','ARRAY_A');
 defined('HOUR_IN_SECONDS') || define('HOUR_IN_SECONDS',3600);
+function sanitize_text_field($v):string{return trim(strip_tags((string)$v));}
 function wp_kses_post($v):string{return (string)$v;}
 function home_url($v=''):string{return 'https://example.test'.$v;}
 final class MKT_Auth {
