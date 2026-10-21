@@ -131,6 +131,8 @@ jobs:
         run: php 18-marketplace/tests/test-maintenance-seller-pause-rollback.php
       - name: Public expiry and commerce atomicity source-and-runtime negative cases
         run: php 18-marketplace/tests/test-expiry-commerce-integrity.php
+      - name: Dashboard and Seller Studio SQL fail-closed actual-class regression
+        run: php 18-marketplace/tests/test-dashboard-studio-sql-failclosed.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
