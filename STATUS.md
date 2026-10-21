@@ -4,9 +4,9 @@
 
 - Review basis: uploaded File18 plan, consolidated three central plans, File17 owner and File00/10/19/20/24/25/26 interfaces; CF05/CF06 remain conditional.
 - Candidate: **2.1.0-RC16**, Draft PR **#16** stacked on Draft PR #15 (not `main`, staging or deployed code).
-- Four newly corrected source defect groups: expired active listing visibility across public SQL surfaces; offer/counter/deal UTC expiry/republication guards; SQL NULL/error commitment count mistaken for zero; failure to roll back competing-offer decline UPDATE errors.
-- Coverage: **40 named plan/owner controls**, 30 File18 FR/NFR + 10 owner/cross-plan controls. Configured CI: **40 full 38-step QA executions per PHP 8.1 and 8.3**, subject to success verification at final source SHA. The repeats are **not** 40 independent human system audits or all 58 central CV acceptances.
-- RC16 report: `docs/OCT-21-2026-FOURTEENTH-40-CONTROL-RC16-AUDIT.md`; focused negative regression: `tests/test-expiry-commerce-integrity.php`.
+- Six newly corrected source defect groups: expired active listing visibility across public SQL surfaces; offer/counter/deal UTC expiry/republication guards; SQL NULL/error commitment count mistaken for zero; failure to roll back competing-offer decline UPDATE errors; DB-error NULL crash/false-empty participant dashboard; false-zero Seller Studio quality/reports on SQL outage.
+- Coverage: **40 named plan/owner controls**, 30 File18 FR/NFR + 10 owner/cross-plan controls. Configured CI: **40 full 39-step QA executions per PHP 8.1 and 8.3**, subject to success verification at final source SHA. The repeats are **not** 40 independent human system audits or all 58 central CV acceptances.
+- RC16 report: `docs/OCT-21-2026-FOURTEENTH-40-CONTROL-RC16-AUDIT.md`; focused regressions: `tests/test-expiry-commerce-integrity.php`, `tests/test-dashboard-studio-sql-failclosed.php`.
 - **Unresolved:** approved tamper-evident audit retention checkpoint/archive; staging owner contracts, real WP/MySQL concurrency, backup/restore, Founder approval, exact live deployed plugin/schema/migration/log and live re-test. WPVibe connect attempt on 21 Oct returned Cloudflare HTTP 530; origin cause unknown.
 - **Live status: UNVERIFIED.** Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔
 
