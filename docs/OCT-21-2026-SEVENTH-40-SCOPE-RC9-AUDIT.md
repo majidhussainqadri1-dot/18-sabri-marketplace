@@ -55,6 +55,8 @@ The table records **40 different requirement-based source inspections**—not fo
 - **R7-02 — Legal retention hold create/release not atomic with mandatory audit.** `MKT_Governance::create_hold` and `release_hold` previously committed hold state independently of audit. Corrected transaction boundaries, error propagation and rollback before success; injected audit failure proves legal hold remains active when release audit is unavailable.
 - **R7-03 — Seller identity projection write/readback falsely trusted.** `MKT_Listings::ensure_seller` used mutable `insert_id` without checking successful INSERT and ignored UPDATE outcome when refreshing File00 eligibility. Corrected with seller insert/result validation, immediate ID/readback, version-CAS refresh and immutable created-seller audit inside a transaction. Rejects stale/failed writes. Identity truth remains File00 owned.
 
+- **R7-04 — Concurrent active legal-hold race.** The active-hold existence precheck was outside the INSERT transaction and the target/status index was nonunique. Added canonical object-named MySQL `GET_LOCK` acquired inside the owner transaction, second in-lock active-hold check, and deferred lock release until COMMIT/ROLLBACK through the existing `MKT_DB` mechanism. A fake-DB race fixture verifies a hold appearing between first check and in-lock check blocks duplicate creation. **Staging still must verify real MySQL simultaneous requests, lock wait, loss of connection and application rollback.**
+
 ## Test evidence and known limitations
 - `test-governance-recall-hold-atomicity.php` executes real File18 governance methods against simulated WordPress database failures, checks rollback and committed audits.
 - `test-seller-atomicity.php` executes the real File18 seller method against simulated stale insert ID, failed seller CAS refresh, missing readback and failed audit.
@@ -63,7 +65,7 @@ The table records **40 different requirement-based source inspections**—not fo
 - Automated tests are not real MySQL concurrency, WP rest authentication, actual File00 identity, cross-module File10/17/19 handoffs, browser accessibility, upgrade/rollback or live proof.
 
 ## Unresolved issues and blockers requiring staging/live
-1. **Retention hold duplicate active race:** pre-check and nonunique `target_status` index could allow overlapping active holds in concurrent MySQL sessions; no concurrent verified acceptance. Treat as unresolved safety acceptance, not proven fixed.
+1. **Retention hold race:** source-level named-lock + in-lock recheck correction exists, but actual simultaneous WordPress/MySQL requests and lock timeout have not been staged. Treat it as **implementation corrected, operational acceptance unverified**, not as a live fix.
 2. **Governance version / WordPress/MySQL:** real migration and already deployed schema table state missing; verification cannot derive from source `dbDelta`.
 3. **Release parity/Cloudflare:** connector site inventory still requires authorization and live attempts have returned HTTP 530; DNS/origin/security root cause unverified. Never bypass protection to force tests.
 4. **The other owner modules:** File00,10,17,19,20,24,25,26 real versions and integration behavior not established. Privacy erasure with hold, recall propagation to buyers, payment/offer negative paths, and hard-blocked seller status require end-to-end user-role and concurrency tests.
