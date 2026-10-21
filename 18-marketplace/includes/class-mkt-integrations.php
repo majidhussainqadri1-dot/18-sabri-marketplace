@@ -48,6 +48,10 @@ final class MKT_Integrations {
             'is_minor' => null,
             'guardian_verified' => false,
             'risk_state' => 'unknown',
+            'file00_eligible' => false,
+            'file00_marketplace_scope_verified' => false,
+            'file00_marketplace_seller_allowed' => false,
+            'file00_marketplace_deal_allowed' => false,
             'capabilities' => [],
             'roles' => [],
             'version' => '',
@@ -58,6 +62,38 @@ final class MKT_Integrations {
         $raw = apply_filters('sabri_identity_assertions', null, $user_id, 'marketplace');
         if (!is_array($raw) && function_exists('smc_get_marketplace_assertions')) {
             $raw = smc_get_marketplace_assertions($user_id);
+        }
+        // File00's actual repository-level canonical contract is
+        // SMC_Contracts::assertions() with scoped clinical_commerce decisions,
+        // not necessarily a separate smc_get_marketplace_assertions() function.
+        if (!is_array($raw) && class_exists('SMC_Contracts') && is_callable(['SMC_Contracts','assertions'])) {
+            $source = SMC_Contracts::assertions($user_id);
+            if (is_array($source)) {
+                $commerce = (array) ($source['clinical_commerce'] ?? []);
+                $age = (array) ($source['age_context'] ?? []);
+                $scope_known = array_key_exists('marketplace_seller_actions_allowed', $commerce)
+                    && array_key_exists('marketplace_direct_deal_allowed', $commerce);
+                $raw = [
+                    'available' => true,
+                    'compatible' => $scope_known,
+                    'status' => (string) ($source['status'] ?? 'unknown'),
+                    'approved' => self::identity_true($source['approved'] ?? false),
+                    'verified' => self::identity_true($source['identity_documents_current'] ?? false),
+                    'suspended' => self::identity_true($source['suspended'] ?? false),
+                    'is_minor' => self::identity_true($age['known'] ?? false)
+                        ? self::identity_true($age['minor'] ?? false) : null,
+                    'guardian_verified' => self::identity_true($source['guardian_verified'] ?? false),
+                    'risk_state' => (string) ($source['risk_state'] ?? 'unknown'),
+                    'file00_eligible' => self::identity_true($source['eligible'] ?? false),
+                    'file00_marketplace_scope_verified' => $scope_known,
+                    'file00_marketplace_seller_allowed' => $scope_known && self::identity_true($commerce['marketplace_seller_actions_allowed']),
+                    'file00_marketplace_deal_allowed' => $scope_known && self::identity_true($commerce['marketplace_direct_deal_allowed']),
+                    'capabilities' => [],
+                    'roles' => [],
+                    'version' => sanitize_text_field((string) ($source['contract_version'] ?? '')),
+                    'contract_mode' => 'file00_smc_contract',
+                ];
+            }
         }
         if (!is_array($raw) && function_exists('smc_get_profile') && function_exists('smc_user_status')) {
             $profile = smc_get_profile($user_id);
