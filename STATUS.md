@@ -3,7 +3,7 @@
 ## RC17 — Fifteenth 40-control source safety review (22 October 2026)
 
 - Candidate **2.1.0-RC17**, draft, stacked on unmerged PR #16; GitHub `main` independent and unchanged.
-- **Four new source-confirmed groups corrected:** fail-open missing/failed recall read in publication gates; recalled active items in public detail and both search providers; absent/corrupt prohibited-item policy treated as empty restrictions; failed policy seed steps erroneously promoting installed policy version.
+- **Five new source-confirmed groups corrected:** fail-open missing/failed recall read in publication gates; recalled active items in public detail and both search providers; absent/corrupt prohibited-item policy treated as empty restrictions; corrupt category safety policy bypassed required-field/professional gates; failed policy seed steps erroneously promoting installed policy version.
 - New actual-class negative regressions: `test-rc17-recall-safety-failclosed.php` and `test-rc17-policy-failclosed.php`. Planned **41-stage full suite × 40 runs × PHP 8.1/8.3**; report success only after final exact SHA CI verified.
 - Cross-plan owner matrix: `docs/OCT-22-2026-FIFTEENTH-40-CONTROL-RC17-AUDIT.md` (20 FR + 10 NFR + 10 cross-owner/conditional controls); NOT 58/58 central real acceptance.
 - Remaining release blockers: authorized live WordPress/origin access (Cloudflare HTTP530 and no connected WPVibe site), approved audit hash-chain checkpoint/archive, actual deployed file/DB/migration state, staging MySQL/companion integration, independent reviews, backup/restore/rollback and Founder release approval.
