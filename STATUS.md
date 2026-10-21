@@ -1,5 +1,14 @@
 # File 18 — Marketplace Release Status (20 October 2026)
 
+## RC18 — Sixteenth plan/owner 40-control audit, 22 October 2026
+
+- New source-confirmed defects **4**; source-corrected **4/4**: bypassed publication prerequisites on direct listing submit and admin activation; non-atomic wp-admin moderation audit/events; stale/partial File18 language facet schema falsely verified by `wp_options`.
+- Corrective candidate **2.1.0-RC18** on Draft PR **#20**, stacked on #19 (do not equate with `main` or live). Exact final HEAD and CI must be checked after the last commit.
+- Regression: `tests/test-rc18-core-publication-gates.php` and `tests/test-rc18-facet-schema-truth.php`. Source CI contains **43 stages** in each of **40 complete passes** for PHP 8.1 and PHP 8.3; not 40 independent full manual audits.
+- Traceability: `docs/OCT-22-2026-SIXTEENTH-40-CONTROL-RC18-AUDIT.md`, 30 File18 FR/NFR + 10 companion/conditional owner checkpoints. Actual 58 central CV acceptances and staging not verified.
+- **Blockers unchanged:** Cloudflare HTTP 530/no WPVibe deployed-source connection (#17); approved tamper-evident audit retention/archive checkpoint (#18); live plugin/hash/DB/options/migration/log, staging owners/File00/10/17/19/20/24/25/26, full independent reviews, MySQL race tests, backup/restore/rollback, founder approval and live retest all unverified.
+- **Live truth:** Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔
+
 ## RC17 — Fifteenth 40-control source safety review (22 October 2026)
 
 - Candidate **2.1.0-RC17**, draft, stacked on unmerged PR #16; GitHub `main` independent and unchanged.
