@@ -2,6 +2,7 @@
 /** RC17 actual-class policy absence, corrupt payload and incomplete seed regressions. */
 require __DIR__.'/bootstrap.php';
 defined('ARRAY_A') || define('ARRAY_A','ARRAY_A');
+defined('MKT_VERSION') || define('MKT_VERSION','2.1.0');
 function sanitize_text_field($v):string{return trim(strip_tags((string)$v));}
 function wp_strip_all_tags($v):string{return strip_tags((string)$v);}
 function wp_json_encode($v):string|false{return json_encode($v);}
