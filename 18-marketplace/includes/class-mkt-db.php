@@ -556,7 +556,13 @@ final class MKT_DB {
         $legacy_sellers = $wpdb->prefix . 'smp_sellers';
         $has_products = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($legacy_products))) === $legacy_products;
         $has_sellers = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($legacy_sellers))) === $legacy_sellers;
-        if (!$has_products && !$has_sellers) {
+        $legacy_conversations = $wpdb->prefix . 'smp_conversations';
+        $legacy_messages = $wpdb->prefix . 'smp_messages';
+        $has_conversations = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($legacy_conversations))) === $legacy_conversations;
+        $has_messages = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($legacy_messages))) === $legacy_messages;
+        // File17 still needs communication handoffs when its legacy tables
+        // exist without any old Marketplace seller/product tables.
+        if (!$has_products && !$has_sellers && !$has_conversations && !$has_messages) {
             update_option('mkt_legacy_migration_version', MKT_SCHEMA_VERSION, false);
             return;
         }
@@ -658,8 +664,6 @@ final class MKT_DB {
             $report['quarantined'] += (int) $wpdb->get_var("SELECT COUNT(*) FROM {$legacy_products}");
         }
 
-        $legacy_conversations = $wpdb->prefix . 'smp_conversations';
-        $legacy_messages = $wpdb->prefix . 'smp_messages';
         foreach ([['conversation',$legacy_conversations],['message',$legacy_messages]] as [$type,$table]) {
             if ((string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table))) !== $table) {
                 continue;
