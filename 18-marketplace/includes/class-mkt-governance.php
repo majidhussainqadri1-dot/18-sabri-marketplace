@@ -43,14 +43,44 @@ final class MKT_Governance {
         return (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table))) === $table;
     }
 
+    public static function schema_ready(): bool {
+        // A WordPress option is a migration CLAIM, not proof of actual tables.
+        // Verify the required deployed columns before accepting schema parity.
+        global $wpdb;
+        $required = [
+            'listing_evidence' => ['id','listing_public_id','evidence_json','status','version','reviewed_by','reviewed_at'],
+            'retention_holds' => ['id','public_id','object_type','object_public_id','status','expires_at','released_at'],
+            'recalls' => ['id','public_id','listing_public_id','status','version','activated_at','resolved_at'],
+        ];
+        foreach ($required as $name => $columns) {
+            if (!self::table_exists($name)) return false;
+            $wpdb->last_error = '';
+            $found = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name), 0);
+            if (!is_array($found) || array_diff($columns, $found) || $wpdb->last_error !== '') return false;
+            // Columns without their unique constraints are NOT a deployable
+            // canonical owner schema: duplicate evidence/public IDs would pass.
+            $wpdb->last_error = '';
+            $indexes = $wpdb->get_results('SHOW INDEX FROM ' . self::table($name), ARRAY_A);
+            if (!is_array($indexes) || $wpdb->last_error !== '') return false;
+            $unique = [];
+            foreach ($indexes as $index) {
+                if ((int) ($index['Non_unique'] ?? 1) !== 0 || (int) ($index['Seq_in_index'] ?? 0) !== 1) continue;
+                $unique[(string) ($index['Key_name'] ?? '')] = (string) ($index['Column_name'] ?? '');
+            }
+            $required_unique = $name === 'listing_evidence' ? 'listing_public_id' : 'public_id';
+            if (($unique['PRIMARY'] ?? '') !== 'id' || ($unique[$required_unique] ?? '') !== $required_unique) return false;
+        }
+        return true;
+    }
+
     public static function maybe_upgrade(): void {
-        if ((string) get_option('mkt_governance_schema_version', '') !== self::SCHEMA_VERSION) {
+        if ((string) get_option('mkt_governance_schema_version', '') !== self::SCHEMA_VERSION || !self::schema_ready()) {
             self::install_schema();
         }
     }
 
     private static function install_schema(): void {
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        if (!function_exists('dbDelta')) require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         global $wpdb;
         $c = $wpdb->get_charset_collate();
         $evidence = self::table('listing_evidence');
@@ -116,7 +146,15 @@ final class MKT_Governance {
             KEY updated_at (updated_at)
         ) {$c};");
 
-        update_option('mkt_governance_schema_version', self::SCHEMA_VERSION, false);
+        // Promotion only after real deployed tables/columns were confirmed.
+        // Never let a partial dbDelta result be accepted as upgraded.
+        if (self::schema_ready()) {
+            update_option('mkt_governance_schema_version', self::SCHEMA_VERSION, false);
+            delete_option('mkt_governance_schema_error');
+        } else {
+            delete_option('mkt_governance_schema_version');
+            update_option('mkt_governance_schema_error', 'schema_verification_failed', false);
+        }
     }
 
     public static function register_routes(): void {
@@ -713,10 +751,23 @@ final class MKT_Governance {
         return MKT_Auth::can('mkt_moderate', ['action' => $action]);
     }
 
-    public static function has_active_hold(string $object_type, string $object_public_id): bool {
+    public static function hold_guard_available(): bool {
         if (!self::table_exists('retention_holds')) return false;
         global $wpdb;
-        return (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP()", sanitize_key($object_type), $object_public_id)) > 0;
+        $wpdb->last_error = '';
+        $columns = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table('retention_holds'), 0);
+        return is_array($columns) && !array_diff(['object_type','object_public_id','status','expires_at'], $columns)
+            && $wpdb->last_error === '';
+    }
+
+    public static function has_active_hold(string $object_type, string $object_public_id): bool {
+        // Unavailable legal-hold truth must NEVER be interpreted as permission
+        // to erase sensitive evidence; fail closed until schema is repaired.
+        if (!self::hold_guard_available()) return true;
+        global $wpdb;
+        $wpdb->last_error = '';
+        $count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP()", sanitize_key($object_type), $object_public_id));
+        return $count === null || $wpdb->last_error !== '' || (int) $count > 0;
     }
 
     private static function object_exists(string $type, string $public_id): bool {
