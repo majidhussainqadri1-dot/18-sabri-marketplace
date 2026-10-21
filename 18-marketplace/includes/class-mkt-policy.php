@@ -3,7 +3,7 @@ defined('ABSPATH') || exit;
 
 final class MKT_Policy {
     public static function seed_builtin_policies(): void {
-        if (get_option('mkt_builtin_policy_version') === MKT_VERSION . '-categories-3' || !MKT_DB::table_exists('policies')) return;
+        if (get_option('mkt_builtin_policy_version') === MKT_VERSION . '-categories-4' || !MKT_DB::table_exists('policies')) return;
         global $wpdb;
         $now = MKT_DB::now();
         $policies = [
@@ -32,23 +32,27 @@ final class MKT_Policy {
         ];
         foreach ($policies as $policy) {
             $version = (int) ($policy['version'] ?? 1);
+            $wpdb->last_error = '';
             $exists = $wpdb->get_var($wpdb->prepare(
                 'SELECT id FROM ' . MKT_DB::table('policies') . ' WHERE policy_type=%s AND policy_key=%s AND jurisdiction=%s AND version=%d',
                 $policy['policy_type'], $policy['policy_key'], 'GLOBAL', $version
             ));
+            if ($wpdb->last_error !== '') return; // Never mark incomplete policy seeding complete.
             if ($exists) continue;
             if ($version > 1) {
-                $wpdb->update(MKT_DB::table('policies'), ['status'=>'retired','updated_at'=>$now], [
+                $retired = $wpdb->update(MKT_DB::table('policies'), ['status'=>'retired','updated_at'=>$now], [
                     'policy_type'=>$policy['policy_type'],'policy_key'=>$policy['policy_key'],'jurisdiction'=>'GLOBAL','status'=>'active',
                 ]);
+                if ($retired === false) return;
             }
-            $wpdb->insert(MKT_DB::table('policies'), [
+            $inserted = $wpdb->insert(MKT_DB::table('policies'), [
                 'public_id'=>MKT_DB::uuid(),'policy_type'=>$policy['policy_type'],'policy_key'=>$policy['policy_key'],'jurisdiction'=>'GLOBAL',
                 'version'=>$version,'status'=>'active','rules_json'=>wp_json_encode($policy['rules']),'created_by'=>0,'approved_by'=>0,
                 'effective_at'=>$now,'created_at'=>$now,'updated_at'=>$now,
             ]);
+            if ($inserted !== 1) return; // Retry on next seed; never claim partial data is complete.
         }
-        update_option('mkt_builtin_policy_version', MKT_VERSION . '-categories-3', false);
+        update_option('mkt_builtin_policy_version', MKT_VERSION . '-categories-4', false);
     }
 
     public static function categories(): array {
@@ -83,6 +87,8 @@ final class MKT_Policy {
         $category_policy = self::active('category', $category, (string) ($data['location_country'] ?? 'GLOBAL'));
         if (!$category_policy) {
             $errors[] = ['code'=>'unknown_category','message'=>__('The selected category is not currently approved.', 'marketplace')];
+        } elseif (!is_array($category_policy['rules']['required_fields'] ?? null)) {
+            $errors[] = ['code'=>'category_policy_unavailable','message'=>__('The category safety requirements cannot be verified. Publishing is paused.', 'marketplace')];
         } else {
             $rules = $category_policy['rules'];
             foreach ((array) ($rules['required_fields'] ?? []) as $field) {
@@ -102,6 +108,9 @@ final class MKT_Policy {
         }
 
         $prohibited = self::active('prohibited', 'global_prohibited_goods_services');
+        if (!$prohibited || !is_array($prohibited['rules']['categories'] ?? null) || !is_array($prohibited['rules']['phrases'] ?? null)) {
+            $errors[] = ['code'=>'prohibited_policy_unavailable','message'=>__('The marketplace safety policy cannot be verified. Publishing and selling are paused.','marketplace')];
+        }
         $haystack = strtolower(wp_strip_all_tags(implode(' ', [(string)($data['title'] ?? ''),(string)($data['description'] ?? ''),$category])));
         foreach ((array) ($prohibited['rules']['categories'] ?? []) as $blocked_category) {
             if ($category === sanitize_key((string) $blocked_category)) $errors[] = ['code'=>'prohibited_category','message'=>__('This category is prohibited.', 'marketplace')];

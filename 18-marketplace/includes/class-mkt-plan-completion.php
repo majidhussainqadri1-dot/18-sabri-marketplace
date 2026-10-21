@@ -165,7 +165,9 @@ final class MKT_Plan_Completion {
         $language=self::language_for_listing((int)$listing['id']);
         if ($language==='' || $language==='und') return new WP_Error('mkt_listing_language_required',__('A specific listing language must be set before submission.','marketplace'),['status'=>422]);
         if ((string)$listing['category']==='homeopathic_medicines') { $evidence=MKT_Governance::public_evidence($listing_public_id); if (!$evidence) return new WP_Error('mkt_evidence_review_required',__('Approved structured product evidence is required before this regulated listing can be submitted or published.','marketplace'),['status'=>422]); }
-        if (MKT_Governance::public_recall($listing_public_id)) return new WP_Error('mkt_active_recall',__('This listing cannot be submitted or activated while an active recall exists.','marketplace'),['status'=>409]);
+        $recall = MKT_Governance::recall_publication_guard($listing_public_id);
+        if (is_wp_error($recall)) return $recall;
+        if ($recall) return new WP_Error('mkt_active_recall',__('This listing cannot be submitted or activated while an active recall exists.','marketplace'),['status'=>409]);
         return true;
     }
 
