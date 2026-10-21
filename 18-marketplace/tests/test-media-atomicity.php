@@ -46,10 +46,11 @@ class FakeMediaDB {
  public int $count_calls=0;
  public int $fail_count_at=0;
  public bool $race_limit=false;
+ public string $locked_status='draft';
  public function prepare(string $sql,...$args):string{return vsprintf(str_replace(['%s','%d'],["'%s'",'%d'],$sql),$args);}
  public function get_row(string $sql,$type) {
   if(str_contains($sql,'INNER JOIN'))return ['id'=>11,'public_id'=>'listing-0001','status'=>'draft','seller_user_id'=>41];
-  if(str_contains($sql,'FOR UPDATE'))return ['id'=>11];
+  if(str_contains($sql,'FOR UPDATE'))return ['id'=>11,'status'=>$this->locked_status];
   return $this->media;
  }
  public function get_var($query){
@@ -102,4 +103,9 @@ $race=MKT_Listings::attach_media('listing-0001',['alt_text'=>'Cover'],41);
 assert_same('mkt_media_limit',$race->get_error_code(),'Concurrent attach after preflight must enforce max_media_refs inside canonical row lock.');
 assert_same(['START','ROLLBACK','RELEASE'],$wpdb->ops,'Concurrent overflow never writes a media reference and releases File10 allocation.');
 assert_same(null,$wpdb->media,'Failed concurrent insert must not leave a media ref.');
+$wpdb->race_limit=false;$wpdb->ops=[];$wpdb->count_calls=0;$wpdb->locked_status='active';
+$stateRace=MKT_Listings::attach_media('listing-0001',['alt_text'=>'Cover'],41);
+assert_same('mkt_media_state_locked',$stateRace->get_error_code(),'Listing moved to active after preflight cannot receive a new media ref.');
+assert_same(['START','ROLLBACK','RELEASE'],$wpdb->ops,'Stale listing state under canonical lock compensates File10 allocation.');
+$wpdb->locked_status='draft';
 fwrite(STDOUT,"File18 File10 media transaction and compensation regressions complete.\n");
