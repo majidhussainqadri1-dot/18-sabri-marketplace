@@ -20,6 +20,7 @@ final class MKT_Contracts {public static function allowed_currencies():array{ret
 class PolicyFailureDB {
  public string $last_error='';
  public string $prohibited='valid';
+ public string $category='valid';
  public bool $failed_seed_read=false;
  public bool $failed_seed_write=false;
  public int $insert_count=0;
@@ -29,7 +30,7 @@ class PolicyFailureDB {
  }
  public function get_row(string $sql,$array):?array{
   if(str_contains($sql,"'category'")){
-    return ['public_id'=>'category-id','version'=>1,'rules_json'=>json_encode(['required_fields'=>[]])];
+    return ['public_id'=>'category-id','version'=>1,'rules_json'=>$this->category==='corrupt'?'invalid JSON':json_encode(['required_fields'=>[]])];
   }
   if($this->prohibited==='missing')return null;
   if($this->prohibited==='corrupt')return ['public_id'=>'prohibited-id','version'=>1,'rules_json'=>'{malformed JSON'];
@@ -55,6 +56,11 @@ $data=[
  'listing_type'=>'product','quantity'=>1,'currency'=>'PKR','price'=>150,
  'declarations'=>['truthful'=>true,'rights_owned'=>true,'no_patient_data'=>true,'zero_commission_understood'=>true]
 ];
+$wpdb->category='corrupt';
+$invalidCategory=MKT_Policy::evaluate_listing($data,[]);
+assert_same(false,$invalidCategory['valid'],'Malformed category policy must not bypass required fields and professional verification.');
+assert_true(in_array('category_policy_unavailable',array_column($invalidCategory['errors'],'code'),true),'Malformed category owner record has an explicit denial code.');
+$wpdb->category='valid';
 $wpdb->prohibited='missing';
 $missing=MKT_Policy::evaluate_listing($data,[]);
 assert_same(false,$missing['valid'],'No canonical prohibited policy means no new listing acceptance.');
