@@ -134,9 +134,9 @@ jobs:
       - name: Dashboard and Seller Studio SQL fail-closed actual-class regression
         run: php 18-marketplace/tests/test-dashboard-studio-sql-failclosed.php
       - name: Fail-closed recall owner / public exposure source regression
-        run: php 18-marketplace/tests/test-rc18-recall-safety-failclosed.php
+        run: php 18-marketplace/tests/test-rc17-recall-safety-failclosed.php
       - name: Fail-closed prohibited policy and source seeding regression
-        run: php 18-marketplace/tests/test-rc18-policy-failclosed.php
+        run: php 18-marketplace/tests/test-rc17-policy-failclosed.php
       - name: RC18 owner PHP and admin publication negative regression
         run: php 18-marketplace/tests/test-rc18-core-publication-gates.php
       - name: RC18 independent language-facets migration truth
