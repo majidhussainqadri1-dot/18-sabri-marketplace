@@ -67,7 +67,13 @@ final class MKT_Integrations {
         // SMC_Contracts::assertions() with scoped clinical_commerce decisions,
         // not necessarily a separate smc_get_marketplace_assertions() function.
         if (!is_array($raw) && class_exists('SMC_Contracts') && is_callable(['SMC_Contracts','assertions'])) {
-            $source = SMC_Contracts::assertions($user_id);
+            try {
+                $source = SMC_Contracts::assertions($user_id);
+            } catch (Throwable $e) {
+                // No generic/legacy fallback can turn a failed canonical identity
+                // owner read into permission. Do not leak identity-provider errors.
+                return $empty;
+            }
             if (is_array($source)) {
                 $commerce = (array) ($source['clinical_commerce'] ?? []);
                 $age = (array) ($source['age_context'] ?? []);
