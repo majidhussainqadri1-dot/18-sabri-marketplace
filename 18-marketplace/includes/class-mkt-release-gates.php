@@ -151,7 +151,9 @@ final class MKT_Release_Gates {
             $evidence=MKT_Governance::public_evidence($public_id);
             if (!$evidence) return new WP_Error('mkt_evidence_review_required',__('Approved structured ingredients, manufacturer, licensing/batch/expiry evidence is required before this regulated listing can be submitted or published.','marketplace'),['status'=>422]);
         }
-        if (MKT_Governance::public_recall($public_id)) return new WP_Error('mkt_active_recall',__('This listing cannot be submitted or activated while an active recall or takedown exists.','marketplace'),['status'=>409]);
+        $recall = MKT_Governance::recall_publication_guard($public_id);
+        if (is_wp_error($recall)) return $recall;
+        if ($recall) return new WP_Error('mkt_active_recall',__('This listing cannot be submitted or activated while an active recall or takedown exists.','marketplace'),['status'=>409]);
         return true;
     }
 
