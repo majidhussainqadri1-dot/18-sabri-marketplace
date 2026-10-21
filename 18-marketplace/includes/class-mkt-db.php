@@ -63,19 +63,31 @@ final class MKT_DB {
     public static function maybe_upgrade(): void {
         $schema_current = (string) get_option('mkt_schema_version', '') === MKT_SCHEMA_VERSION;
         $runtime_current = (string) get_option('mkt_plugin_version', '') === MKT_VERSION;
-        if ($schema_current && $runtime_current) {
-            return;
-        }
-        if (!self::acquire_upgrade_lock()) {
-            return;
-        }
+        // A wp_options version is only a claim: check actual deployed schema
+        // periodically, without issuing ~20 metadata queries on every request.
+        $recent = (int) get_option('mkt_schema_verified_at', 0) >= time() - 300;
+        if ($schema_current && $runtime_current && $recent) return;
+        if (!self::acquire_upgrade_lock()) return;
         try {
-            if (!$schema_current) {
-                self::install_schema();
-                self::seed_defaults();
-                self::migrate_legacy_foundation();
+            // Re-read after acquiring the upgrade lock; a parallel request may
+            // already have repaired and verified the schema.
+            $schema_current = (string) get_option('mkt_schema_version', '') === MKT_SCHEMA_VERSION;
+            $ready = self::schema_ready();
+            if (!$schema_current || !$ready) {
+                delete_option('mkt_schema_verified_at');
+                try {
+                    self::install_schema();
+                    self::seed_defaults();
+                    self::migrate_legacy_foundation();
+                } catch (Throwable $e) {
+                    delete_option('mkt_schema_version');
+                    update_option('mkt_schema_error', 'schema_verification_failed', false);
+                    throw $e;
+                }
             }
             update_option('mkt_plugin_version', MKT_VERSION, false);
+            update_option('mkt_schema_verified_at', time(), false);
+            delete_option('mkt_schema_error');
         } finally {
             self::release_upgrade_lock();
         }
@@ -436,10 +448,25 @@ final class MKT_DB {
         foreach ($sql as $statement) {
             dbDelta($statement);
         }
-        // dbDelta() issuing a statement is not proof that the target schema exists.
-        // Verify essential tables and version-critical columns before promoting the
-        // wp_options schema marker; otherwise retries are silently skipped.
-        $required_columns = [
+        // Version promotion requires real schema proof, not dbDelta output.
+        if (!self::schema_ready()) {
+            throw new RuntimeException('Marketplace schema installation incomplete: table/column contract unverified.');
+        }
+        update_option('mkt_schema_version', MKT_SCHEMA_VERSION, false);
+    }
+
+    public static function schema_ready(): bool {
+        global $wpdb;
+        // A single table inventory query, plus selected version-critical
+        // columns; called on a bounded cadence, not on every WordPress hit.
+        $wpdb->last_error = '';
+        $tables = $wpdb->get_col($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($wpdb->prefix . 'mkt_') . '%'));
+        if (!is_array($tables) || $wpdb->last_error !== '') return false;
+        $present = array_fill_keys($tables, true);
+        foreach (self::TABLES as $name) {
+            if (!isset($present[self::table($name)])) return false;
+        }
+        $required = [
             'sellers' => ['id','user_id','status','version'],
             'listings' => ['id','seller_id','public_id','status','version','published_at'],
             'offers' => ['id','listing_id','idempotency_key','version'],
@@ -449,17 +476,12 @@ final class MKT_DB {
             'audit' => ['id','previous_hash','entry_hash'],
             'migration_handoffs' => ['id','legacy_type','legacy_id','status'],
         ];
-        foreach (self::TABLES as $name) {
-            if (!self::table_exists($name)) {
-                throw new RuntimeException('Marketplace schema installation incomplete: required table missing.');
-            }
-            if (!isset($required_columns[$name])) continue;
-            $columns = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name));
-            if (!is_array($columns) || array_diff($required_columns[$name], $columns)) {
-                throw new RuntimeException('Marketplace schema installation incomplete: required columns missing.');
-            }
+        foreach ($required as $name => $columns) {
+            $wpdb->last_error = '';
+            $found = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name));
+            if (!is_array($found) || array_diff($columns, $found) || $wpdb->last_error !== '') return false;
         }
-        update_option('mkt_schema_version', MKT_SCHEMA_VERSION, false);
+        return true;
     }
 
     public static function transaction(callable $callback) {
