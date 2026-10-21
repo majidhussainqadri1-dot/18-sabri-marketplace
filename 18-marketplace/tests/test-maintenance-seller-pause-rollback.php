@@ -2,6 +2,7 @@
 /** Seller de-eligibility cannot be committed while public active listings remain for SQL pause failure. */
 require __DIR__.'/bootstrap.php';
 defined('ARRAY_A')||define('ARRAY_A','ARRAY_A');
+function wp_json_encode($data):string{return json_encode($data);}
 class SellerCronDB {
  public string $last_error='';
  public bool $fail_pause=false;
