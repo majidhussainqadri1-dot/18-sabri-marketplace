@@ -2,9 +2,7 @@
 /** RC19: immutable medical and zero-commission constitutional policy floor. */
 require __DIR__.'/bootstrap.php';
 defined('ARRAY_A')||define('ARRAY_A','ARRAY_A');
-function sanitize_key($v):string{return strtolower(preg_replace('/[^a-z0-9_-]/i','',(string)$v));}
 function wp_strip_all_tags($v):string{return strip_tags((string)$v);}
-function apply_filters($hook,$value,...$args){return $value;}
 class MKT_DB {public static function table(string $name):string{return 'wp_mkt_'.$name;} public static function now():string{return '2026-10-22 00:00:00';}}
 class MKT_Contracts {public static function allowed_currencies():array{return ['PKR'];}}
 class PolicyFloorDB {
