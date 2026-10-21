@@ -481,6 +481,36 @@ final class MKT_DB {
             $found = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name));
             if (!is_array($found) || array_diff($columns, $found) || $wpdb->last_error !== '') return false;
         }
+        // Primary identifiers and idempotency keys need their exact UNIQUE
+        // shapes. A missing/composite substitute silently breaks at-most-one
+        // owner commands even if all columns were successfully dbDelta-created.
+        $unique_contracts = [
+            'sellers' => ['user_id' => ['user_id']],
+            'listings' => ['public_id' => ['public_id']],
+            'offers' => ['idempotency_key' => ['idempotency_key']],
+            'deals' => ['accepted_offer_id' => ['accepted_offer_id']],
+            'outbox' => ['event_id' => ['event_id']],
+            'inbox' => ['source_event' => ['source','event_id']],
+            'idempotency' => ['actor_scope_key' => ['actor_user_id','scope','idempotency_key']],
+            'migration_handoffs' => ['legacy_record' => ['legacy_type','legacy_id']],
+        ];
+        foreach ($unique_contracts as $name => $keys) {
+            $wpdb->last_error = '';
+            $indexes = $wpdb->get_results('SHOW INDEX FROM ' . self::table($name), ARRAY_A);
+            if (!is_array($indexes) || $wpdb->last_error !== '') return false;
+            $actual = [];
+            foreach ($indexes as $index) {
+                if ((int) ($index['Non_unique'] ?? 1) !== 0) continue;
+                $key = (string) ($index['Key_name'] ?? '');
+                $seq = (int) ($index['Seq_in_index'] ?? 0);
+                if ($key === '' || $seq < 1) continue;
+                $actual[$key][$seq] = (string) ($index['Column_name'] ?? '');
+            }
+            if (($actual['PRIMARY'] ?? []) !== [1 => 'id']) return false;
+            foreach ($keys as $key => $columns) {
+                if (($actual[$key] ?? []) !== array_combine(range(1, count($columns)), $columns)) return false;
+            }
+        }
         return true;
     }
 
