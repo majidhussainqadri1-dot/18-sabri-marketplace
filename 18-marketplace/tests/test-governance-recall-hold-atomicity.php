@@ -37,6 +37,7 @@ class MKT_Audit {
 }
 class FakeGovDB {
  public string $prefix='wp_';
+ public string $last_error='';
  public array $ops=[];
  public array $recalls=[];
  public array $holds=[];
@@ -44,11 +45,13 @@ class FakeGovDB {
  public bool $update_fail=false;
  public bool $parallel_hold_on_recheck=false;
  public int $hold_lookup_count=0;
+ public int $fail_hold_lookup_at=0;
  public function prepare(string $s,...$args):string{return vsprintf(str_replace(['%s','%d'],["'%s'",'%d'],$s),$args);}
  public function get_var(string $sql) {
   if(str_contains($sql,'GET_LOCK')){$this->ops[]='LOCK';return 1;}
   if(str_contains($sql,'SELECT public_id FROM wp_mkt_retention_holds')){
    $this->hold_lookup_count++;
+   if($this->fail_hold_lookup_at===$this->hold_lookup_count){$this->last_error='Injected retention-hold SELECT error';return null;}
    if($this->parallel_hold_on_recheck&&$this->hold_lookup_count===2)return 'concurrent-existing-hold';
    foreach($this->holds as $row)if(($row['status']??'')==='active')return (string)$row['public_id'];
    return null;
@@ -119,4 +122,13 @@ $blocked=MKT_Governance::create_hold($hold,23);
 assert_same('mkt_hold_exists',$blocked->get_error_code(),'A competing active legal hold discovered after acquiring object lock is rejected.');
 assert_true(in_array('UNLOCK',$wpdb->ops,true),'The object serialization lock is released when the competing hold blocks creation.');
 $wpdb->parallel_hold_on_recheck=false;
+$wpdb->hold_lookup_count=0;$wpdb->fail_hold_lookup_at=1;$wpdb->ops=[];
+$failedEarly=MKT_Governance::create_hold($hold,23);
+assert_same('mkt_hold_lookup_unavailable',$failedEarly->get_error_code(),'SQL failure on preliminary legal-hold lookup blocks creation.');
+assert_true(!in_array('INSERT',$wpdb->ops,true),'Preliminary lookup failure performs no INSERT.');
+$wpdb->hold_lookup_count=0;$wpdb->fail_hold_lookup_at=2;$wpdb->ops=[];
+$failedInside=MKT_Governance::create_hold($hold,23);
+assert_same('mkt_hold_lookup_unavailable',$failedInside->get_error_code(),'SQL failure inside canonical hold lock blocks creation.');
+assert_same(['BEGIN','LOCK','ROLLBACK','UNLOCK'],$wpdb->ops,'In-lock lookup SQL failure rolls back and releases object lock without INSERT.');
+$wpdb->fail_hold_lookup_at=0;
 fwrite(STDOUT,"File18 governance recall and legal-hold atomicity fault injection complete.\n");
