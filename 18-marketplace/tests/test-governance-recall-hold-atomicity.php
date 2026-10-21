@@ -46,6 +46,7 @@ class FakeGovDB {
  public bool $parallel_hold_on_recheck=false;
  public int $hold_lookup_count=0;
  public int $fail_hold_lookup_at=0;
+ public bool $fail_hold_read=false;
  public function prepare(string $s,...$args):string{return vsprintf(str_replace(['%s','%d'],["'%s'",'%d'],$s),$args);}
  public function get_var(string $sql) {
   if(str_contains($sql,'GET_LOCK')){$this->ops[]='LOCK';return 1;}
@@ -68,7 +69,7 @@ class FakeGovDB {
  }
  public function get_row(string $sql,$array) {
   if(str_contains($sql,'wp_mkt_recalls')){foreach($this->recalls as $r)if(str_contains($sql,$r['public_id']))return $r;return null;}
-  if(str_contains($sql,'wp_mkt_retention_holds')){foreach($this->holds as $r)if(str_contains($sql,$r['public_id']))return $r;return null;}
+  if(str_contains($sql,'wp_mkt_retention_holds')){if($this->fail_hold_read){$this->last_error='Injected hold record SELECT error';return null;}foreach($this->holds as $r)if(str_contains($sql,$r['public_id']))return $r;return null;}
   return null;
  }
  public function update(string $table,array $changes,array $where):int|false {
@@ -131,4 +132,9 @@ $failedInside=MKT_Governance::create_hold($hold,23);
 assert_same('mkt_hold_lookup_unavailable',$failedInside->get_error_code(),'SQL failure inside canonical hold lock blocks creation.');
 assert_same(['BEGIN','LOCK','ROLLBACK','UNLOCK'],$wpdb->ops,'In-lock lookup SQL failure rolls back and releases object lock without INSERT.');
 $wpdb->fail_hold_lookup_at=0;
+$wpdb->fail_hold_read=true;$wpdb->ops=[];
+$cannotRead=MKT_Governance::release_hold($holdId,['reason'=>'Unavailable database'],23);
+assert_same('mkt_hold_lookup_unavailable',$cannotRead->get_error_code(),'SQL outage while reading an existing legal hold must not pretend the hold does not exist.');
+assert_true(!in_array('UPDATE',$wpdb->ops,true),'Failed hold SELECT cannot change canonical legal-hold state.');
+$wpdb->fail_hold_read=false;
 fwrite(STDOUT,"File18 governance recall and legal-hold atomicity fault injection complete.\n");
