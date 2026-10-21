@@ -312,7 +312,12 @@ final class MKT_Listings {
             return new WP_Error('mkt_media_state_locked', __('Media cannot be changed in the current listing state.', 'marketplace'), ['status' => 409]);
         }
         global $wpdb;
-        $count = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('media_refs') . ' WHERE listing_id=%d AND status=%s', (int) $listing['id'], 'active'));
+        $wpdb->last_error = '';
+        $count_raw = $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('media_refs') . ' WHERE listing_id=%d AND status=%s', (int) $listing['id'], 'active'));
+        if ($count_raw === null || $wpdb->last_error !== '') {
+            return new WP_Error('mkt_media_count_unavailable', __('Media limits cannot be verified while storage is unavailable.', 'marketplace'), ['status' => 503]);
+        }
+        $count = (int) $count_raw;
         if ($count >= (int) MKT_DB::settings()['max_media_refs']) {
             return new WP_Error('mkt_media_limit', __('The listing media limit has been reached.', 'marketplace'), ['status' => 422]);
         }
@@ -322,7 +327,23 @@ final class MKT_Listings {
         }
         $ref_id = MKT_DB::uuid();
         try {
-            $committed = MKT_DB::transaction(static function() use ($wpdb, $ref_id, $listing, $user_id, $media_input, $media, $count, $public_id) {
+            $committed = MKT_DB::transaction(static function() use ($wpdb, $ref_id, $listing, $user_id, $media_input, $media, $public_id) {
+                // Serialise all writers per listing. A preflight COUNT outside
+                // this lock cannot enforce the limit under concurrent uploads.
+                $wpdb->last_error = '';
+                $locked = $wpdb->get_row($wpdb->prepare('SELECT id FROM ' . MKT_DB::table('listings') . ' WHERE id=%d FOR UPDATE', (int) $listing['id']), ARRAY_A);
+                if (!is_array($locked) || $wpdb->last_error !== '') {
+                    return new WP_Error('mkt_media_listing_lock_failed', __('The listing media limit could not be verified.', 'marketplace'), ['status'=>503]);
+                }
+                $wpdb->last_error = '';
+                $fresh_count = $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('media_refs') . ' WHERE listing_id=%d AND status=%s', (int) $listing['id'], 'active'));
+                if ($fresh_count === null || $wpdb->last_error !== '') {
+                    return new WP_Error('mkt_media_count_unavailable', __('The media count could not be verified under the listing lock.', 'marketplace'), ['status'=>503]);
+                }
+                $count = (int) $fresh_count;
+                if ($count >= (int) MKT_DB::settings()['max_media_refs']) {
+                    return new WP_Error('mkt_media_limit', __('The listing media limit has been reached.', 'marketplace'), ['status'=>422]);
+                }
                 $inserted = $wpdb->insert(MKT_DB::table('media_refs'), [
                     'public_id' => $ref_id,
                     'listing_id' => (int) $listing['id'],
