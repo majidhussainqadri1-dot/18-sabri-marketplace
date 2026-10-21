@@ -43,8 +43,26 @@ final class MKT_Governance {
         return (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table))) === $table;
     }
 
+    public static function schema_ready(): bool {
+        // A WordPress option is a migration CLAIM, not proof of actual tables.
+        // Verify the required deployed columns before accepting schema parity.
+        global $wpdb;
+        $required = [
+            'listing_evidence' => ['id','listing_public_id','evidence_json','status','version','reviewed_by','reviewed_at'],
+            'retention_holds' => ['id','public_id','object_type','object_public_id','status','expires_at','released_at'],
+            'recalls' => ['id','public_id','listing_public_id','status','version','activated_at','resolved_at'],
+        ];
+        foreach ($required as $name => $columns) {
+            if (!self::table_exists($name)) return false;
+            $wpdb->last_error = '';
+            $found = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name), 0);
+            if (!is_array($found) || array_diff($columns, $found) || $wpdb->last_error !== '') return false;
+        }
+        return true;
+    }
+
     public static function maybe_upgrade(): void {
-        if ((string) get_option('mkt_governance_schema_version', '') !== self::SCHEMA_VERSION) {
+        if ((string) get_option('mkt_governance_schema_version', '') !== self::SCHEMA_VERSION || !self::schema_ready()) {
             self::install_schema();
         }
     }
@@ -116,7 +134,15 @@ final class MKT_Governance {
             KEY updated_at (updated_at)
         ) {$c};");
 
-        update_option('mkt_governance_schema_version', self::SCHEMA_VERSION, false);
+        // Promotion only after real deployed tables/columns were confirmed.
+        // Never let a partial dbDelta result be accepted as upgraded.
+        if (self::schema_ready()) {
+            update_option('mkt_governance_schema_version', self::SCHEMA_VERSION, false);
+            delete_option('mkt_governance_schema_error');
+        } else {
+            delete_option('mkt_governance_schema_version');
+            update_option('mkt_governance_schema_error', 'schema_verification_failed', false);
+        }
     }
 
     public static function register_routes(): void {
