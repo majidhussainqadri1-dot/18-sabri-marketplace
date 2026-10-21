@@ -448,22 +448,33 @@ final class MKT_Commerce {
         return self::deal_dto($fresh);
     }
 
-    public static function dashboard(int $user_id): array {
+    /** A DB outage is not a zero-value commerce metric or an empty inbox. */
+    private static function dashboard_rows(string $sql): ?array {
         global $wpdb;
-        $offers = $wpdb->get_results($wpdb->prepare(
+        $wpdb->last_error = '';
+        $rows = $wpdb->get_results($sql, ARRAY_A);
+        return is_array($rows) && $wpdb->last_error === '' ? $rows : null;
+    }
+
+    public static function dashboard(int $user_id): array|WP_Error {
+        global $wpdb;
+        $offers = self::dashboard_rows($wpdb->prepare(
             'SELECT o.*,l.public_id AS listing_public_id,l.title AS listing_title FROM ' . MKT_DB::table('offers') . ' o JOIN ' . MKT_DB::table('listings') . ' l ON l.id=o.listing_id WHERE o.buyer_user_id=%d OR o.seller_user_id=%d ORDER BY o.updated_at DESC LIMIT 100',
             $user_id, $user_id
         ), ARRAY_A);
-        $deals = $wpdb->get_results($wpdb->prepare(
+        $deals = self::dashboard_rows($wpdb->prepare(
             'SELECT d.*,l.public_id AS listing_public_id,l.title AS listing_title FROM ' . MKT_DB::table('deals') . ' d JOIN ' . MKT_DB::table('listings') . ' l ON l.id=d.listing_id WHERE d.buyer_user_id=%d OR d.seller_user_id=%d ORDER BY d.updated_at DESC LIMIT 100',
             $user_id, $user_id
         ), ARRAY_A);
         $listings = MKT_Listings::search(['seller_user_id' => $user_id, 'limit' => 100], true);
-        $reports = $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE reporter_user_id=%d ORDER BY updated_at DESC LIMIT 100', $user_id), ARRAY_A);
-        $disputes = $wpdb->get_results($wpdb->prepare(
+        $reports = self::dashboard_rows($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE reporter_user_id=%d ORDER BY updated_at DESC LIMIT 100', $user_id), ARRAY_A);
+        $disputes = self::dashboard_rows($wpdb->prepare(
             'SELECT x.*,d.public_id AS deal_public_id FROM ' . MKT_DB::table('disputes') . ' x JOIN ' . MKT_DB::table('deals') . ' d ON d.id=x.deal_id WHERE d.buyer_user_id=%d OR d.seller_user_id=%d ORDER BY x.updated_at DESC LIMIT 100',
             $user_id, $user_id
         ), ARRAY_A);
+        if ($offers === null || $deals === null || $reports === null || $disputes === null || !empty($listings['error'])) {
+            return new WP_Error('mkt_dashboard_unavailable', __('Marketplace dashboard facts cannot be verified during a database outage.', 'marketplace'), ['status'=>503]);
+        }
         $status_counts = static function(array $rows): array {
             $counts = [];
             foreach ($rows as $row) $counts[(string) $row['status']] = ($counts[(string) $row['status']] ?? 0) + 1;
