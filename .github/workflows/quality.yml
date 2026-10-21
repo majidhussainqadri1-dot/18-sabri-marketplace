@@ -121,6 +121,8 @@ jobs:
         run: php 18-marketplace/tests/test-search-media-sql-failure.php
       - name: Conditional CF06 localization source owner boundary
         run: php 18-marketplace/tests/test-cf06-conditional-boundary.php
+      - name: File00 canonical SMC_Contracts scoped marketplace integration regression
+        run: php 18-marketplace/tests/test-file00-native-marketplace-contract.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
