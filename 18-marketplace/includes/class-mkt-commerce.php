@@ -47,7 +47,7 @@ final class MKT_Commerce {
                     'SELECT l.*,s.user_id AS seller_user_id,s.status AS seller_status FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d FOR UPDATE',
                     (int) $listing['id']
                 ), ARRAY_A);
-                if (!$fresh_listing || (string) $fresh_listing['status'] !== 'active' || (string) $fresh_listing['availability'] === 'unavailable' || (string) $fresh_listing['seller_status'] !== 'approved') {
+                if (!$fresh_listing || (string) $fresh_listing['status'] !== 'active' || (string) $fresh_listing['availability'] === 'unavailable' || (string) $fresh_listing['seller_status'] !== 'approved' || !MKT_Listings::not_expired($fresh_listing['expires_at'] ?? null)) {
                     return new WP_Error('mkt_listing_unavailable', __('The listing is no longer available for offers.', 'marketplace'), ['status' => 409]);
                 }
                 $fresh_seller_id = (int) $fresh_listing['seller_user_id'];
@@ -149,7 +149,7 @@ final class MKT_Commerce {
                         'SELECT l.*,s.user_id AS seller_user_id,s.status AS seller_status FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d FOR UPDATE',
                         (int) $offer['listing_id']
                     ), ARRAY_A);
-                    if (!$fresh_listing || (string) $fresh_listing['status'] !== 'active' || (string) $fresh_listing['availability'] === 'unavailable' || (string) $fresh_listing['seller_status'] !== 'approved') {
+                    if (!$fresh_listing || (string) $fresh_listing['status'] !== 'active' || (string) $fresh_listing['availability'] === 'unavailable' || (string) $fresh_listing['seller_status'] !== 'approved' || !MKT_Listings::not_expired($fresh_listing['expires_at'] ?? null)) {
                         return new WP_Error('mkt_listing_unavailable', __('The listing is no longer available for a counter-offer.', 'marketplace'), ['status' => 409]);
                     }
                     $seller_eligibility = MKT_Auth::seller_eligibility((int) $fresh_listing['seller_user_id']);
@@ -220,15 +220,17 @@ final class MKT_Commerce {
                     $root = (int) ($offer['root_offer_id'] ?: $offer['id']);
                     $listing_status = (string) $wpdb->get_var($wpdb->prepare('SELECT status FROM ' . MKT_DB::table('listings') . ' WHERE id=%d', (int) $offer['listing_id']));
                     if ($listing_status === 'sold_unavailable') {
-                        $wpdb->query($wpdb->prepare(
+                        $declined = $wpdb->query($wpdb->prepare(
                             "UPDATE " . MKT_DB::table('offers') . " SET status='declined',updated_at=%s,version=version+1 WHERE listing_id=%d AND id<>%d AND status IN ('open','countered')",
                             MKT_DB::now(), (int) $offer['listing_id'], (int) $offer['id']
                         ));
+                        if ($declined === false) throw new RuntimeException('Competing offers could not be declined atomically.');
                     } else {
-                        $wpdb->query($wpdb->prepare(
+                        $declined = $wpdb->query($wpdb->prepare(
                             "UPDATE " . MKT_DB::table('offers') . " SET status='declined',updated_at=%s,version=version+1 WHERE listing_id=%d AND id<>%d AND status IN ('open','countered') AND (id=%d OR root_offer_id=%d)",
                             MKT_DB::now(), (int) $offer['listing_id'], (int) $offer['id'], $root, $root
                         ));
+                        if ($declined === false) throw new RuntimeException('Competing offers could not be declined atomically.');
                     }
                 }
                 MKT_Audit::record('offer_transitioned', 'offer', $public_id, ['from' => $offer['status'], 'to' => $to]);
@@ -253,7 +255,7 @@ final class MKT_Commerce {
             'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d FOR UPDATE',
             (int) $offer['listing_id']
         ), ARRAY_A);
-        if (!$listing || $listing['status'] !== 'active' || $listing['seller_status'] !== 'approved') {
+        if (!$listing || $listing['status'] !== 'active' || $listing['seller_status'] !== 'approved' || $listing['availability'] === 'unavailable' || !MKT_Listings::not_expired($listing['expires_at'] ?? null)) {
             return new WP_Error('mkt_listing_unavailable', __('The listing is no longer available.', 'marketplace'), ['status' => 409]);
         }
         $seller_eligibility = MKT_Auth::seller_eligibility((int) $listing['seller_user_id']);
@@ -265,10 +267,15 @@ final class MKT_Commerce {
             return self::deal_dto($existing);
         }
         if ((float) $listing['quantity'] <= 1) {
-            $other_deal = (int) $wpdb->get_var($wpdb->prepare(
+            $wpdb->last_error = '';
+            $other_deal_raw = $wpdb->get_var($wpdb->prepare(
                 "SELECT COUNT(*) FROM " . MKT_DB::table('deals') . " WHERE listing_id=%d AND status NOT IN ('cancelled','closed')",
                 (int) $listing['id']
             ));
+            if ($other_deal_raw === null || $wpdb->last_error !== '' || !ctype_digit((string) $other_deal_raw)) {
+                return new WP_Error('mkt_deal_count_unavailable', __('Existing commitments cannot be verified; the deal must not proceed.', 'marketplace'), ['status' => 503]);
+            }
+            $other_deal = (int) $other_deal_raw;
             if ($other_deal > 0) {
                 return new WP_Error('mkt_listing_already_committed', __('Another offer has already committed this listing.', 'marketplace'), ['status' => 409]);
             }
