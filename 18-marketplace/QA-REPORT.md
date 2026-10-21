@@ -45,3 +45,12 @@ Fresh RC10 negative tests execute actual File18 governance/privacy classes: abse
 ## Ninth review regression and cross-file boundary (21 October 2026)
 
 Negative test coverage now includes core missing tables/columns/critical unique indexes despite matching `wp_options` versions, a bounded 300s schema-verification cadence, standalone File17 migration with only conversations/messages and failure injection, governance composite index uniqueness, privacy report/dispute SELECT and transaction-count failures, plus separate conditional CF05 derivative-only ownership source checks. Source tests are not live File17, CF05 or concurrent MySQL integration evidence. `qa-static.sh` includes 29 stages per complete pass; quality workflow repeats 40 passes for each PHP 8.1/8.3 matrix member. Repository HEAD and RC11 ZIP SHA require final CI verification, with live connection Cloudflare 530, staged rollback and Founder acceptance blocked.
+
+## Tenth audit negatives: SQL-complete privacy export, legal holds and File00 denial
+
+- Direct new `test-privacy-export-completeness.php` fails safely when seller/listings/offers/deals/reports/disputes/listing_evidence SELECT returns SQL error or NULL, or when mandatory evidence schema missing; verifies eligible owner records included and internal eligibility/policy snapshots excluded.
+- Existing actual-class `test-governance-recall-hold-atomicity.php` adds SQL errors on preliminary and under-lock legal-hold existence lookups and hold release read: no INSERT/UPDATE, rollback/UNLOCK after failed in-lock read.
+- New actual File00 adapter `test-file00-explicit-identity-denial.php` blocks false approval/verification even if status active, preserves safe legacy fallback for absent fields, honors provider unavailability.
+- `test-review-invariants.php` now asserts the fail-closed verified exporter, not outdated unchecked get_results direct sourcing.
+- `qa-static.sh` now has 31 steps and GitHub Actions is configured for 40 counted *complete* passes on PHP 8.1 and 8.3; final exact-head CI, package SHA, and live/staging truth require independent evidence.
+- These are source-only/fake-provider tests; **not actual WordPress privacy job recovery**, live MySQL legal hold isolation, real File00 provider, or staging/deployment acceptance.
