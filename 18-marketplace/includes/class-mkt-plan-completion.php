@@ -18,7 +18,31 @@ final class MKT_Plan_Completion {
         add_filter('mkt_assurance_manifest', [self::class, 'assurance_manifest']);
     }
     public static function table(): string { global $wpdb; return $wpdb->prefix . 'mkt_listing_facets'; }
-    private static function maybe_upgrade(): void { if ((string)get_option('mkt_plan_completion_schema_version','') !== self::SCHEMA_VERSION) self::install_schema(); }
+    private static function maybe_upgrade(): void {
+        if ((string)get_option('mkt_plan_completion_schema_version','') !== self::SCHEMA_VERSION || !self::schema_ready()) self::install_schema();
+    }
+
+    /** A wp_options version is never evidence that its canonical facet table exists. */
+    public static function schema_ready(): bool {
+        global $wpdb;
+        $table = self::table();
+        $wpdb->last_error = '';
+        $exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table)));
+        if ((string)$exists !== $table || $wpdb->last_error !== '') return false;
+        $wpdb->last_error = '';
+        $columns = $wpdb->get_col('SHOW COLUMNS FROM ' . $table, 0);
+        if (!is_array($columns) || array_diff(['listing_id','language','version','created_at','updated_at'], $columns) || $wpdb->last_error !== '') return false;
+        $wpdb->last_error = '';
+        $index_rows = $wpdb->get_results('SHOW INDEX FROM ' . $table, ARRAY_A);
+        if (!is_array($index_rows) || $wpdb->last_error !== '') return false;
+        $primary = [];
+        foreach ($index_rows as $index) {
+            if (($index['Key_name'] ?? '') === 'PRIMARY' && (int)($index['Non_unique'] ?? 1) === 0) {
+                $primary[(int)($index['Seq_in_index'] ?? 0)] = (string)($index['Column_name'] ?? '');
+            }
+        }
+        return $primary === [1=>'listing_id'];
+    }
     private static function install_schema(): void {
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         global $wpdb; $table=self::table(); $c=$wpdb->get_charset_collate();
@@ -31,7 +55,13 @@ final class MKT_Plan_Completion {
             PRIMARY KEY (listing_id),
             KEY language (language)
         ) {$c};");
+        if (!self::schema_ready()) {
+            delete_option('mkt_plan_completion_schema_version');
+            update_option('mkt_plan_completion_schema_error', 'schema_verification_failed', false);
+            return;
+        }
         update_option('mkt_plan_completion_schema_version', self::SCHEMA_VERSION, false);
+        delete_option('mkt_plan_completion_schema_error');
     }
 
     public static function override_routes(): void {
@@ -160,7 +190,7 @@ final class MKT_Plan_Completion {
         return $row;
     }
 
-    private static function publication_gate(string $listing_public_id): bool|WP_Error {
+    public static function publication_gate(string $listing_public_id): bool|WP_Error {
         $listing=MKT_Listings::get($listing_public_id,true); if (!$listing) return new WP_Error('mkt_listing_not_found',__('Listing not found.','marketplace'),['status'=>404]);
         $language=self::language_for_listing((int)$listing['id']);
         if ($language==='' || $language==='und') return new WP_Error('mkt_listing_language_required',__('A specific listing language must be set before submission.','marketplace'),['status'=>422]);
