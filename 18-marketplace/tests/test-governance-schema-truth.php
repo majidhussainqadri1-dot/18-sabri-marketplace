@@ -6,6 +6,7 @@ class SchemaDB {
  public string $last_error='';
  public bool $tables_ok=true;
  public bool $columns_ok=false;
+ public bool $indexes_ok=true;
  public int $delta_calls=0;
  public function esc_like(string $x):string{return $x;}
  public function get_charset_collate():string{return 'DEFAULT CHARACTER SET utf8mb4';}
@@ -24,6 +25,14 @@ class SchemaDB {
   if(str_contains($q,'wp_mkt_retention_holds'))return ['id','public_id','object_type','object_public_id','status','expires_at','released_at'];
   if(str_contains($q,'wp_mkt_recalls'))return ['id','public_id','listing_public_id','status','version','activated_at','resolved_at'];
   return [];
+ }
+ public function get_results(string $sql,$type):array {
+  $unique = str_contains($sql,'wp_mkt_listing_evidence')?'listing_public_id':'public_id';
+  $index = [
+   ['Key_name'=>'PRIMARY','Non_unique'=>0,'Column_name'=>'id','Seq_in_index'=>1],
+   ['Key_name'=>$unique,'Non_unique'=>$this->indexes_ok?0:1,'Column_name'=>$unique,'Seq_in_index'=>1],
+  ];
+  return $index;
  }
 }
 $wpdb=new SchemaDB();
@@ -45,6 +54,14 @@ MKT_Governance::maybe_upgrade();
 assert_same('1.0.0',$GLOBALS['options']['mkt_governance_schema_version'],'Schema version is promoted only after all required columns exist.');
 assert_true(!isset($GLOBALS['options']['mkt_governance_schema_error']),'Successful repair clears previous migration failure marker.');
 assert_same(true,MKT_Governance::schema_ready(),'Repaired actual database state verifies.');
+
+$wpdb->indexes_ok=false;
+assert_same(false,MKT_Governance::schema_ready(),'Required columns without unique indexes cannot prove owner schema integrity.');
+MKT_Governance::maybe_upgrade();
+assert_true(!isset($GLOBALS['options']['mkt_governance_schema_version']),'Missing unique constraints invalidate schema version parity.');
+$wpdb->indexes_ok=true;
+MKT_Governance::maybe_upgrade();
+assert_same('1.0.0',$GLOBALS['options']['mkt_governance_schema_version'],'Unique index restoration permits schema version after full verification.');
 
 $wpdb->tables_ok=false;
 MKT_Governance::maybe_upgrade();
