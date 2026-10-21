@@ -106,8 +106,15 @@ final class MKT_Integrations {
         if (!in_array($assertions['risk_state'], ['low','normal','medium','elevated','high','critical','blocked','unknown'], true)) {
             $assertions['risk_state'] = 'unknown';
         }
-        $assertions['approved'] = !empty($assertions['approved']) || in_array($assertions['status'], ['approved','verified','active'], true);
-        $assertions['verified'] = !empty($assertions['verified']) || $assertions['status'] === 'verified';
+        // File00 is the authoritative identity owner. An explicit denial of
+        // approval/verification must NEVER be overridden by a coarse status
+        // label (e.g. active account with pending or revoked verification).
+        $assertions['approved'] = array_key_exists('approved', $raw)
+            ? (bool) $raw['approved']
+            : in_array($assertions['status'], ['approved','verified','active'], true);
+        $assertions['verified'] = array_key_exists('verified', $raw)
+            ? (bool) $raw['verified']
+            : $assertions['status'] === 'verified';
         $assertions['suspended'] = !empty($assertions['suspended']) || in_array($assertions['status'], ['suspended','banned','revoked'], true);
         $assertions['guardian_verified'] = (bool) $assertions['guardian_verified'];
         if ($assertions['is_minor'] !== null) $assertions['is_minor'] = (bool) $assertions['is_minor'];
