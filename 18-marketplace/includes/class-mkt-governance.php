@@ -713,10 +713,22 @@ final class MKT_Governance {
         return MKT_Auth::can('mkt_moderate', ['action' => $action]);
     }
 
-    public static function has_active_hold(string $object_type, string $object_public_id): bool {
+    public static function hold_guard_available(): bool {
         if (!self::table_exists('retention_holds')) return false;
         global $wpdb;
-        return (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP()", sanitize_key($object_type), $object_public_id)) > 0;
+        $columns = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table('retention_holds'), 0);
+        return is_array($columns) && !array_diff(['object_type','object_public_id','status','expires_at'], $columns)
+            && $wpdb->last_error === '';
+    }
+
+    public static function has_active_hold(string $object_type, string $object_public_id): bool {
+        // Unavailable legal-hold truth must NEVER be interpreted as permission
+        // to erase sensitive evidence; fail closed until schema is repaired.
+        if (!self::hold_guard_available()) return true;
+        global $wpdb;
+        $wpdb->last_error = '';
+        $count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP()", sanitize_key($object_type), $object_public_id));
+        return $count === null || $wpdb->last_error !== '' || (int) $count > 0;
     }
 
     private static function object_exists(string $type, string $public_id): bool {
