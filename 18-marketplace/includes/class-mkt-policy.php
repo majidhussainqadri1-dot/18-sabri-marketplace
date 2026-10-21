@@ -87,6 +87,8 @@ final class MKT_Policy {
         $category_policy = self::active('category', $category, (string) ($data['location_country'] ?? 'GLOBAL'));
         if (!$category_policy) {
             $errors[] = ['code'=>'unknown_category','message'=>__('The selected category is not currently approved.', 'marketplace')];
+        } elseif (!is_array($category_policy['rules']['required_fields'] ?? null)) {
+            $errors[] = ['code'=>'category_policy_unavailable','message'=>__('The category safety requirements cannot be verified. Publishing is paused.', 'marketplace')];
         } else {
             $rules = $category_policy['rules'];
             foreach ((array) ($rules['required_fields'] ?? []) as $field) {
