@@ -73,9 +73,10 @@ assert_true(str_contains($db, 'Marketplace legacy listing migration write failed
 assert_true(str_contains($db, 'Marketplace legacy communication handoff write failed'), 'Communication handoff migration rejects failed inserts.');
 assert_true(str_contains($db, 'legacy seller migration read failed') && str_contains($db, 'legacy listing migration read failed'), 'Legacy inventory failure cannot masquerade as empty input.');
 assert_true(str_contains($db, "'migration_handoffs' => ['id','legacy_type','legacy_id','status']"), 'Schema verification checks version-critical migration columns.');
-$verifyTables = strpos($db, 'foreach (self::TABLES as $name)');
+$verifyTables = strpos($db, 'if (!self::schema_ready())');
 $promote = strpos($db, "update_option('mkt_schema_version', MKT_SCHEMA_VERSION");
-assert_true($verifyTables !== false && $promote !== false && $verifyTables < $promote, 'Schema option promotion occurs after table/column verification.');
+assert_true($verifyTables !== false && $promote !== false && $verifyTables < $promote
+    && str_contains($db, 'public static function schema_ready(): bool'), 'Schema option promotion occurs only after exact deployed-table/column verification.');
 
 $moderation = $read('class-mkt-moderation.php');
 $reportOpen = strpos($moderation, 'public static function create_report');

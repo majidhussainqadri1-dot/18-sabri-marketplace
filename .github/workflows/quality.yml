@@ -107,6 +107,12 @@ jobs:
         run: php 18-marketplace/tests/test-privacy-hold-failclosed.php
       - name: Governance schema version promotion truth
         run: php 18-marketplace/tests/test-governance-schema-truth.php
+      - name: Main Marketplace schema real-table drift negative tests
+        run: php 18-marketplace/tests/test-core-schema-truth.php
+      - name: File 17 legacy-only conversation/message migration negative tests
+        run: php 18-marketplace/tests/test-file17-legacy-only-migration.php
+      - name: Conditional CF05 analytics ownership does not duplicate File18 truth
+        run: php 18-marketplace/tests/test-cf05-conditional-boundary.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
@@ -129,16 +135,16 @@ jobs:
           set -euo pipefail
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-a"
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
-          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC10.zip"
-          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC10.zip"
+          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC11.zip"
+          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC11.zip"
           cmp "$A" "$B"
           unzip -t "$A"
           HASH_A="$(sha256sum "$A" | awk '{print $1}')"
           HASH_B="$(sha256sum "$B" | awk '{print $1}')"
           test "$HASH_A" = "$HASH_B"
-          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC10.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC10.zip.sha256"
+          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC11.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC11.zip.sha256"
           {
-            echo '### File 18 Marketplace 2.1.0 RC10'
+            echo '### File 18 Marketplace 2.1.0 RC11'
             echo
             echo "SHA-256: \`$HASH_A\`"
             echo
@@ -147,9 +153,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.php == '8.3'
         with:
-          name: file18-marketplace-2.1.0-rc10
+          name: file18-marketplace-2.1.0-rc11
           path: |
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC10.zip
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC10.zip.sha256
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC11.zip
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC11.zip.sha256
           if-no-files-found: error
           retention-days: 14

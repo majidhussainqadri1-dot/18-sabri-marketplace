@@ -63,19 +63,31 @@ final class MKT_DB {
     public static function maybe_upgrade(): void {
         $schema_current = (string) get_option('mkt_schema_version', '') === MKT_SCHEMA_VERSION;
         $runtime_current = (string) get_option('mkt_plugin_version', '') === MKT_VERSION;
-        if ($schema_current && $runtime_current) {
-            return;
-        }
-        if (!self::acquire_upgrade_lock()) {
-            return;
-        }
+        // A wp_options version is only a claim: check actual deployed schema
+        // periodically, without issuing ~20 metadata queries on every request.
+        $recent = (int) get_option('mkt_schema_verified_at', 0) >= time() - 300;
+        if ($schema_current && $runtime_current && $recent) return;
+        if (!self::acquire_upgrade_lock()) return;
         try {
-            if (!$schema_current) {
-                self::install_schema();
-                self::seed_defaults();
-                self::migrate_legacy_foundation();
+            // Re-read after acquiring the upgrade lock; a parallel request may
+            // already have repaired and verified the schema.
+            $schema_current = (string) get_option('mkt_schema_version', '') === MKT_SCHEMA_VERSION;
+            $ready = self::schema_ready();
+            if (!$schema_current || !$ready) {
+                delete_option('mkt_schema_verified_at');
+                try {
+                    self::install_schema();
+                    self::seed_defaults();
+                    self::migrate_legacy_foundation();
+                } catch (Throwable $e) {
+                    delete_option('mkt_schema_version');
+                    update_option('mkt_schema_error', 'schema_verification_failed', false);
+                    throw $e;
+                }
             }
             update_option('mkt_plugin_version', MKT_VERSION, false);
+            update_option('mkt_schema_verified_at', time(), false);
+            delete_option('mkt_schema_error');
         } finally {
             self::release_upgrade_lock();
         }
@@ -436,10 +448,25 @@ final class MKT_DB {
         foreach ($sql as $statement) {
             dbDelta($statement);
         }
-        // dbDelta() issuing a statement is not proof that the target schema exists.
-        // Verify essential tables and version-critical columns before promoting the
-        // wp_options schema marker; otherwise retries are silently skipped.
-        $required_columns = [
+        // Version promotion requires real schema proof, not dbDelta output.
+        if (!self::schema_ready()) {
+            throw new RuntimeException('Marketplace schema installation incomplete: table/column contract unverified.');
+        }
+        update_option('mkt_schema_version', MKT_SCHEMA_VERSION, false);
+    }
+
+    public static function schema_ready(): bool {
+        global $wpdb;
+        // A single table inventory query, plus selected version-critical
+        // columns; called on a bounded cadence, not on every WordPress hit.
+        $wpdb->last_error = '';
+        $tables = $wpdb->get_col($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($wpdb->prefix . 'mkt_') . '%'));
+        if (!is_array($tables) || $wpdb->last_error !== '') return false;
+        $present = array_fill_keys($tables, true);
+        foreach (self::TABLES as $name) {
+            if (!isset($present[self::table($name)])) return false;
+        }
+        $required = [
             'sellers' => ['id','user_id','status','version'],
             'listings' => ['id','seller_id','public_id','status','version','published_at'],
             'offers' => ['id','listing_id','idempotency_key','version'],
@@ -449,17 +476,42 @@ final class MKT_DB {
             'audit' => ['id','previous_hash','entry_hash'],
             'migration_handoffs' => ['id','legacy_type','legacy_id','status'],
         ];
-        foreach (self::TABLES as $name) {
-            if (!self::table_exists($name)) {
-                throw new RuntimeException('Marketplace schema installation incomplete: required table missing.');
+        foreach ($required as $name => $columns) {
+            $wpdb->last_error = '';
+            $found = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name));
+            if (!is_array($found) || array_diff($columns, $found) || $wpdb->last_error !== '') return false;
+        }
+        // Primary identifiers and idempotency keys need their exact UNIQUE
+        // shapes. A missing/composite substitute silently breaks at-most-one
+        // owner commands even if all columns were successfully dbDelta-created.
+        $unique_contracts = [
+            'sellers' => ['user_id' => ['user_id']],
+            'listings' => ['public_id' => ['public_id']],
+            'offers' => ['idempotency_key' => ['idempotency_key']],
+            'deals' => ['accepted_offer_id' => ['accepted_offer_id']],
+            'outbox' => ['event_id' => ['event_id']],
+            'inbox' => ['source_event' => ['source','event_id']],
+            'idempotency' => ['actor_scope_key' => ['actor_user_id','scope','idempotency_key']],
+            'migration_handoffs' => ['legacy_record' => ['legacy_type','legacy_id']],
+        ];
+        foreach ($unique_contracts as $name => $keys) {
+            $wpdb->last_error = '';
+            $indexes = $wpdb->get_results('SHOW INDEX FROM ' . self::table($name), ARRAY_A);
+            if (!is_array($indexes) || $wpdb->last_error !== '') return false;
+            $actual = [];
+            foreach ($indexes as $index) {
+                if ((int) ($index['Non_unique'] ?? 1) !== 0) continue;
+                $key = (string) ($index['Key_name'] ?? '');
+                $seq = (int) ($index['Seq_in_index'] ?? 0);
+                if ($key === '' || $seq < 1) continue;
+                $actual[$key][$seq] = (string) ($index['Column_name'] ?? '');
             }
-            if (!isset($required_columns[$name])) continue;
-            $columns = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name));
-            if (!is_array($columns) || array_diff($required_columns[$name], $columns)) {
-                throw new RuntimeException('Marketplace schema installation incomplete: required columns missing.');
+            if (($actual['PRIMARY'] ?? []) !== [1 => 'id']) return false;
+            foreach ($keys as $key => $columns) {
+                if (($actual[$key] ?? []) !== array_combine(range(1, count($columns)), $columns)) return false;
             }
         }
-        update_option('mkt_schema_version', MKT_SCHEMA_VERSION, false);
+        return true;
     }
 
     public static function transaction(callable $callback) {
@@ -534,7 +586,13 @@ final class MKT_DB {
         $legacy_sellers = $wpdb->prefix . 'smp_sellers';
         $has_products = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($legacy_products))) === $legacy_products;
         $has_sellers = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($legacy_sellers))) === $legacy_sellers;
-        if (!$has_products && !$has_sellers) {
+        $legacy_conversations = $wpdb->prefix . 'smp_conversations';
+        $legacy_messages = $wpdb->prefix . 'smp_messages';
+        $has_conversations = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($legacy_conversations))) === $legacy_conversations;
+        $has_messages = (string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($legacy_messages))) === $legacy_messages;
+        // File17 still needs communication handoffs when its legacy tables
+        // exist without any old Marketplace seller/product tables.
+        if (!$has_products && !$has_sellers && !$has_conversations && !$has_messages) {
             update_option('mkt_legacy_migration_version', MKT_SCHEMA_VERSION, false);
             return;
         }
@@ -636,8 +694,6 @@ final class MKT_DB {
             $report['quarantined'] += (int) $wpdb->get_var("SELECT COUNT(*) FROM {$legacy_products}");
         }
 
-        $legacy_conversations = $wpdb->prefix . 'smp_conversations';
-        $legacy_messages = $wpdb->prefix . 'smp_messages';
         foreach ([['conversation',$legacy_conversations],['message',$legacy_messages]] as [$type,$table]) {
             if ((string) $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table))) !== $table) {
                 continue;

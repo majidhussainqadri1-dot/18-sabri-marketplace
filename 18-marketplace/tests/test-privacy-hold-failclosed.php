@@ -21,6 +21,9 @@ class PrivacyFakeDB {
  public bool $fail_seller=false;
  public bool $fail_saves=false;
  public bool $fail_evidence=false;
+ public bool $fail_report_query=false;
+ public bool $fail_dispute_query=false;
+ public bool $fail_count_query=false;
  public int $writes=0;
  public int $audits=0;
  public function esc_like($s):string{return $s;}
@@ -28,7 +31,7 @@ class PrivacyFakeDB {
  public function get_var(string $sql) {
   if(str_contains($sql,'SHOW TABLES LIKE'))return $this->holds_table?'wp_mkt_retention_holds':null;
   if(str_contains($sql,'COUNT(*) FROM wp_mkt_retention_holds'))return $this->hold_count;
-  if(str_contains($sql,'COUNT(*) FROM wp_mkt_offers')||str_contains($sql,'COUNT(*) FROM wp_mkt_deals'))return 0;
+  if(str_contains($sql,'COUNT(*) FROM wp_mkt_offers')||str_contains($sql,'COUNT(*) FROM wp_mkt_deals'))return $this->fail_count_query?null:0;
   return null;
  }
  public function get_col(string $sql,int $index=0):array{return $this->columns;}
@@ -36,8 +39,9 @@ class PrivacyFakeDB {
   if(str_contains($sql,'wp_mkt_sellers'))return $this->seller;
   return null;
  }
- public function get_results(string $sql,$type):array{
-  if(str_contains($sql,'wp_mkt_reports'))return $this->reports;
+ public function get_results(string $sql,$type):?array{
+  if(str_contains($sql,'wp_mkt_reports'))return $this->fail_report_query?null:$this->reports;
+  if(str_contains($sql,'wp_mkt_disputes'))return $this->fail_dispute_query?null:[];
   return [];
  }
  public function update(string $table,array $changes,array $where):int|false {
@@ -86,6 +90,20 @@ $wpdb->fail_evidence=true;
 $bad=MKT_Privacy::erase('person@example.org');
 assert_same(false,$bad['done'],'Failed evidence minimization blocks success.');
 $wpdb->fail_evidence=false;
+$wpdb->fail_report_query=true;
+$previous_audits=$wpdb->audits;
+$failed_report=MKT_Privacy::erase('person@example.org');
+assert_same(false,$failed_report['done'],'Failed report SELECT must not be treated as zero reports.');
+assert_same($previous_audits,$wpdb->audits,'Failed privacy SELECT never records a completed-erasure audit.');
+$wpdb->fail_report_query=false;
+$wpdb->fail_dispute_query=true;
+$failed_dispute=MKT_Privacy::erase('person@example.org');
+assert_same(false,$failed_dispute['done'],'Failed dispute SELECT must not falsely complete personal-data erasure.');
+$wpdb->fail_dispute_query=false;
+$wpdb->fail_count_query=true;
+$failed_count=MKT_Privacy::erase('person@example.org');
+assert_same(false,$failed_count['done'],'Unknown retained-offer/deal counts must not become numeric zero.');
+$wpdb->fail_count_query=false;
 $ok=MKT_Privacy::erase('person@example.org');
 assert_same(true,$ok['done'],'Healthy schema and valid database writes complete eligible erasure.');
 assert_true($wpdb->audits > 0,'Completed privacy erasure records an audit.');
