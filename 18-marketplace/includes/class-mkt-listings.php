@@ -303,27 +303,39 @@ final class MKT_Listings {
             return $media;
         }
         $ref_id = MKT_DB::uuid();
-        $inserted = $wpdb->insert(MKT_DB::table('media_refs'), [
-            'public_id' => $ref_id,
-            'listing_id' => (int) $listing['id'],
-            'owner_user_id' => $user_id,
-            'provider' => sanitize_key((string) ($media_input['provider'] ?? 'central-media')),
-            'provider_public_id' => $media['public_id'],
-            'media_kind' => $media['kind'],
-            'rights_status' => $media['rights_status'],
-            'scan_status' => $media['scan_status'],
-            'alt_text' => sanitize_text_field((string) ($media_input['alt_text'] ?? '')),
-            'sort_order' => $count,
-            'metadata_json' => wp_json_encode(array_merge($media['metadata'], ['url' => $media['url'], 'thumbnail_url' => $media['thumbnail_url']])),
-            'status' => 'active',
-            'created_at' => MKT_DB::now(),
-            'updated_at' => MKT_DB::now(),
-        ]);
-        if (!$inserted) {
-            do_action('sabri_media_release_reference', (string) $media['public_id'], $user_id, 'marketplace');
-            return new WP_Error('mkt_media_attach_failed', __('The media reference could not be attached.', 'marketplace'), ['status' => 500]);
+        try {
+            $committed = MKT_DB::transaction(static function() use ($wpdb, $ref_id, $listing, $user_id, $media_input, $media, $count, $public_id) {
+                $inserted = $wpdb->insert(MKT_DB::table('media_refs'), [
+                    'public_id' => $ref_id,
+                    'listing_id' => (int) $listing['id'],
+                    'owner_user_id' => $user_id,
+                    'provider' => sanitize_key((string) ($media_input['provider'] ?? 'central-media')),
+                    'provider_public_id' => $media['public_id'],
+                    'media_kind' => $media['kind'],
+                    'rights_status' => $media['rights_status'],
+                    'scan_status' => $media['scan_status'],
+                    'alt_text' => sanitize_text_field((string) ($media_input['alt_text'] ?? '')),
+                    'sort_order' => $count,
+                    'metadata_json' => wp_json_encode(array_merge($media['metadata'], ['url' => $media['url'], 'thumbnail_url' => $media['thumbnail_url']])),
+                    'status' => 'active',
+                    'created_at' => MKT_DB::now(),
+                    'updated_at' => MKT_DB::now(),
+                ]);
+                if ($inserted !== 1) {
+                    return new WP_Error('mkt_media_attach_failed', __('The media reference could not be attached.', 'marketplace'), ['status' => 503]);
+                }
+                MKT_Audit::record('listing_media_attached', 'listing', $public_id, ['media_ref' => $ref_id]);
+                return true;
+            });
+        } catch (Throwable $e) {
+            $committed = new WP_Error('mkt_media_attach_failed', __('The media reference could not be attached safely.', 'marketplace'), ['status' => 503]);
         }
-        MKT_Audit::record('listing_media_attached', 'listing', $public_id, ['media_ref' => $ref_id]);
+        if (is_wp_error($committed)) {
+            // File 10 owns its ref. Compensation must occur after our rollback,
+            // never inside the owner DB transaction.
+            do_action('sabri_media_release_reference', (string) $media['public_id'], $user_id, 'marketplace');
+            return $committed;
+        }
         return ['public_id' => $ref_id] + $media;
     }
 
@@ -341,10 +353,22 @@ final class MKT_Listings {
         global $wpdb;
         $media = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('media_refs') . ' WHERE public_id=%s AND listing_id=%d AND status=%s', $media_public_id, (int) $listing['id'], 'active'), ARRAY_A);
         if (!$media) return new WP_Error('mkt_media_not_found', __('Media reference not found.', 'marketplace'), ['status' => 404]);
-        $updated = $wpdb->update(MKT_DB::table('media_refs'), ['status' => 'removed', 'updated_at' => MKT_DB::now()], ['id' => (int) $media['id'], 'status' => 'active']);
-        if (!$updated) return new WP_Error('mkt_media_remove_failed', __('Media could not be removed.', 'marketplace'), ['status' => 409]);
+        try {
+            $removed = MKT_DB::transaction(static function() use ($wpdb, $media, $public_id, $media_public_id) {
+                $updated = $wpdb->update(MKT_DB::table('media_refs'), ['status' => 'removed', 'updated_at' => MKT_DB::now()], ['id' => (int) $media['id'], 'status' => 'active']);
+                if ($updated !== 1) {
+                    return new WP_Error('mkt_media_remove_failed', __('Media could not be removed.', 'marketplace'), ['status' => 409]);
+                }
+                MKT_Audit::record('listing_media_removed', 'listing', $public_id, ['media_ref' => $media_public_id]);
+                return true;
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_media_remove_failed', __('Media could not be removed safely.', 'marketplace'), ['status' => 503]);
+        }
+        if (is_wp_error($removed)) return $removed;
+        // Do not release another owner's File 10 reference until the local
+        // removal and immutable audit fact have safely committed.
         do_action('sabri_media_release_reference', (string) $media['provider_public_id'], $user_id, 'marketplace');
-        MKT_Audit::record('listing_media_removed', 'listing', $public_id, ['media_ref' => $media_public_id]);
         return true;
     }
 
