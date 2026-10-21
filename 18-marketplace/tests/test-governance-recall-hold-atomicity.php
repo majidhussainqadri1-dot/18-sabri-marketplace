@@ -6,7 +6,6 @@ define('DAY_IN_SECONDS',86400);
 function sanitize_text_field($v):string{return trim(strip_tags((string)$v));}
 function wp_kses_post($v):string{return strip_tags((string)$v);}
 function wp_json_encode($v):string{return json_encode($v);}
-function mb_substr($v,$start,$len=null):string{return substr((string)$v,$start,$len);}
 function get_current_user_id():int{return 23;}
 class MKT_Auth {public static function can($cap,array $ctx=[]){return true;}}
 class MKT_Listings {public static function get(string $id,bool $private=false):?array{return $id==='listing_99'?['public_id'=>$id,'seller_user_id'=>51]:null;}}
