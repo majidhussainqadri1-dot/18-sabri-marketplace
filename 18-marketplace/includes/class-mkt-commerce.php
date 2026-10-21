@@ -372,6 +372,19 @@ final class MKT_Commerce {
     }
 
     public static function transition_deal(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
+        // This canonical owner is callable outside the REST completion wrapper,
+        // including File18 moderation and integration callers. Always commit
+        // status, tamper-evident audit and outbox atomically at this boundary.
+        try {
+            return MKT_DB::transaction(static function() use ($public_id, $to, $input, $actor_id, $expected_version) {
+                return self::transition_deal_owner($public_id, $to, $input, $actor_id, $expected_version);
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_deal_atomic_failed', __('The deal transition could not be committed and audited safely.', 'marketplace'), ['status'=>503, 'trace_id'=>MKT_Audit::trace_id()]);
+        }
+    }
+
+    private static function transition_deal_owner(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
         if (empty(MKT_DB::settings()['deal_transitions_enabled'])) {
             return new WP_Error('mkt_deals_paused', __('Deal updates are temporarily paused.', 'marketplace'), ['status' => 503]);
         }
@@ -392,7 +405,10 @@ final class MKT_Commerce {
         if (!$participant && $reviewer && !in_array((string) $deal['status'], ['disputed','resolved'], true)) {
             return new WP_Error('mkt_deal_reviewer_scope', __('A dispute reviewer may change only disputed or resolved deals.', 'marketplace'), ['status' => 403]);
         }
-        if ($participant && !in_array($to, ['disputed','cancelled'], true)) {
+        // Dispute/cancellation still changes canonical money/deal facts.
+        // File00 adult, guardian, suspension and risk assertions apply to
+        // every participant mutation, including exit/dispute actions.
+        if ($participant) {
             $capability = $actor_id === (int) $deal['seller_user_id'] ? 'mkt_sell' : 'mkt_buy';
             $auth = MKT_Auth::can($capability, ['action' => 'transition_deal', 'deal_public_id' => $public_id, 'to' => $to]);
             if (is_wp_error($auth)) return $auth;
