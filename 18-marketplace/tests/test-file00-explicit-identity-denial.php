@@ -3,7 +3,11 @@
 require __DIR__.'/bootstrap.php';
 function sanitize_text_field($text):string{return strip_tags((string)$text);}
 function smc_get_marketplace_assertions(int $user_id):array{return $GLOBALS['file00_assertions'];}
+function is_user_logged_in():bool{return true;}
+function get_current_user_id():int{return 41;}
+function current_user_can(string $cap):bool{return true;}
 require dirname(__DIR__).'/includes/class-mkt-integrations.php';
+require dirname(__DIR__).'/includes/class-mkt-auth.php';
 $base=[
  'available'=>true,'compatible'=>true,'version'=>'1.0.0',
  'status'=>'active','approved'=>true,'verified'=>true,'suspended'=>false,
@@ -42,6 +46,9 @@ $GLOBALS['file00_assertions']=$base;
 $GLOBALS['file00_assertions']['approved']='false';
 $GLOBALS['file00_assertions']['verified']='false';
 $denied=MKT_Integrations::identity_assertions(41);
+$forbidden=MKT_Auth::can('mkt_sell');
+assert_true(is_wp_error($forbidden),'Real Marketplace authorization rejects explicit File00 negative even if WordPress capability is true.');
+assert_same('mkt_account_not_eligible',$forbidden->get_error_code(),'Owner account denial produces correct capability refusal.');
 assert_same(false,$denied['approved'],'Textual File00 false must not become truthy-approved.');
 assert_same(false,$denied['verified'],'Textual File00 false must not become truthy-verified.');
 $GLOBALS['file00_assertions']=$base;
@@ -50,6 +57,8 @@ $GLOBALS['file00_assertions']['guardian_verified']='false';
 $minor=MKT_Integrations::identity_assertions(41);
 assert_same(true,$minor['is_minor'],'Textual File00 minor flag is explicitly parsed.');
 assert_same(false,$minor['guardian_verified'],'Textual false guardian approval cannot authorize a minor.');
+$guardianHold=MKT_Auth::can('mkt_buy');
+assert_same('mkt_guardian_required',$guardianHold->get_error_code(),'Real Marketplace authorization rejects a minor whose provider guardian=false.');
 $GLOBALS['file00_assertions']=$base;
 $GLOBALS['file00_assertions']['is_minor']='false';
 $adult=MKT_Integrations::identity_assertions(41);
