@@ -7,7 +7,11 @@ function get_current_user_id():int{return 41;}
 function current_user_can(string $cap):bool{return true;}
 class SMC_Contracts {
  public static array $payload=[];
- public static function assertions(int $id):array{return self::$payload;}
+ public static bool $fail=false;
+ public static function assertions(int $id):array{
+  if(self::$fail)throw new RuntimeException('Private source provider failure');
+  return self::$payload;
+ }
 }
 require dirname(__DIR__).'/includes/class-mkt-integrations.php';
 require dirname(__DIR__).'/includes/class-mkt-auth.php';
@@ -58,4 +62,8 @@ assert_same('mkt_age_verification_required',MKT_Auth::can('mkt_buy')->get_error_
 SMC_Contracts::$payload=$base;
 SMC_Contracts::$payload['risk_state']='high';
 assert_same('mkt_account_risk_hold',MKT_Auth::can('mkt_sell')->get_error_code(),'Explicit File00 high-risk state overrides positive scoped seller decision.');
+SMC_Contracts::$fail=true;
+assert_same(false,MKT_Integrations::identity_assertions(41)['available'],'Canonical File00 exception becomes unavailable, never a weaker profile fallback.');
+assert_same('mkt_identity_provider_unavailable',MKT_Auth::can('mkt_buy')->get_error_code(),'File00 provider runtime exception returns safe 503-style denial.');
+SMC_Contracts::$fail=false;
 fwrite(STDOUT,"File18 real File00 SMC_Contracts marketplace scoped-authorization bridge regressions complete.\n");
