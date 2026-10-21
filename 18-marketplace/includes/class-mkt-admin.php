@@ -152,18 +152,36 @@ final class MKT_Admin {
             exit;
         }
         global $wpdb;
-        $version = 1 + (int) $wpdb->get_var($wpdb->prepare('SELECT MAX(version) FROM ' . MKT_DB::table('policies') . ' WHERE policy_type=%s AND policy_key=%s AND jurisdiction=%s', $type, $key, $jurisdiction));
-        if ($status === 'active') {
-            $wpdb->update(MKT_DB::table('policies'), ['status' => 'retired', 'updated_at' => MKT_DB::now()], ['policy_type' => $type, 'policy_key' => $key, 'jurisdiction' => $jurisdiction, 'status' => 'active']);
+        try {
+            // Policy activation must never retire the last approved rules
+            // before a new immutable version and required audit can commit.
+            $result = MKT_DB::transaction(static function() use ($wpdb, $type, $key, $jurisdiction, $status, $rules) {
+                $version = 1 + (int) $wpdb->get_var($wpdb->prepare('SELECT MAX(version) FROM ' . MKT_DB::table('policies') . ' WHERE policy_type=%s AND policy_key=%s AND jurisdiction=%s', $type, $key, $jurisdiction));
+                if ($status === 'active') {
+                    $retired = $wpdb->update(MKT_DB::table('policies'), ['status' => 'retired', 'updated_at' => MKT_DB::now()], ['policy_type' => $type, 'policy_key' => $key, 'jurisdiction' => $jurisdiction, 'status' => 'active']);
+                    if ($retired === false) {
+                        return new WP_Error('mkt_policy_retire_failed', __('The existing policy could not be retired safely.', 'marketplace'), ['status' => 503]);
+                    }
+                }
+                $created = $wpdb->insert(MKT_DB::table('policies'), [
+                    'public_id' => MKT_DB::uuid(), 'policy_type' => $type, 'policy_key' => $key, 'jurisdiction' => $jurisdiction,
+                    'version' => $version, 'status' => $status, 'rules_json' => wp_json_encode($rules), 'created_by' => get_current_user_id(),
+                    'approved_by' => $status === 'active' ? get_current_user_id() : 0, 'effective_at' => $status === 'active' ? MKT_DB::now() : null,
+                    'created_at' => MKT_DB::now(), 'updated_at' => MKT_DB::now(),
+                ]);
+                if ($created !== 1) {
+                    return new WP_Error('mkt_policy_insert_failed', __('The new policy version could not be saved.', 'marketplace'), ['status' => 503]);
+                }
+                MKT_Audit::record('policy_version_created', 'policy', $key, ['type' => $type, 'jurisdiction' => $jurisdiction, 'version' => $version, 'status' => $status]);
+                return true;
+            });
+        } catch (Throwable $e) {
+            $result = new WP_Error('mkt_policy_transaction_failed', __('The policy change could not be committed safely.', 'marketplace'), ['status' => 503]);
         }
-        $wpdb->insert(MKT_DB::table('policies'), [
-            'public_id' => MKT_DB::uuid(), 'policy_type' => $type, 'policy_key' => $key, 'jurisdiction' => $jurisdiction,
-            'version' => $version, 'status' => $status, 'rules_json' => wp_json_encode($rules), 'created_by' => get_current_user_id(),
-            'approved_by' => $status === 'active' ? get_current_user_id() : 0, 'effective_at' => $status === 'active' ? MKT_DB::now() : null,
-            'created_at' => MKT_DB::now(), 'updated_at' => MKT_DB::now(),
-        ]);
-        MKT_Audit::record('policy_version_created', 'policy', $key, ['type' => $type, 'jurisdiction' => $jurisdiction, 'version' => $version, 'status' => $status]);
-        wp_safe_redirect(add_query_arg(['mkt_updated' => 1], admin_url('admin.php?page=mkt-marketplace-policies')));
+        wp_safe_redirect(add_query_arg(
+            is_wp_error($result) ? ['mkt_error' => rawurlencode($result->get_error_message())] : ['mkt_updated' => 1],
+            admin_url('admin.php?page=mkt-marketplace-policies')
+        ));
         exit;
     }
 
