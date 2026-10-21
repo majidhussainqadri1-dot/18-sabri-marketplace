@@ -1,7 +1,8 @@
 # File 18 — Sabri Marketplace
 
-**Runtime:** 2.0.0  
-**Schema:** 2.0.0  
+**Runtime:** 2.1.0  
+**Schema:** 2.1.0  
+**Contract:** 1.2.0  
 **REST:** `marketplace/v1`  
 **Canonical package folder:** `18-marketplace`  
 **Commission:** **0%**
