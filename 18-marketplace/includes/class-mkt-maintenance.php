@@ -56,7 +56,10 @@ final class MKT_Maintenance {
                         'updated_at'=>MKT_DB::now(),'suspended_at'=>$target==='suspended'?MKT_DB::now():null,'version'=>(int)$seller['version']+1,
                     ],['id'=>(int)$seller['id'],'version'=>(int)$seller['version'],'status'=>(string)$seller['status']]);
                     if ($updated!==1) return true;
-                    if ($target==='suspended') $wpdb->query($wpdb->prepare("UPDATE ".MKT_DB::table('listings')." SET status='paused',updated_at=%s,version=version+1 WHERE seller_id=%d AND status='active'",MKT_DB::now(),(int)$seller['id']));
+                    if ($target==='suspended') {
+                        $paused=$wpdb->query($wpdb->prepare("UPDATE ".MKT_DB::table('listings')." SET status='paused',updated_at=%s,version=version+1 WHERE seller_id=%d AND status='active'",MKT_DB::now(),(int)$seller['id']));
+                        if ($paused===false) throw new RuntimeException('Seller listings could not be paused atomically.');
+                    }
                     MKT_Events::enqueue('MarketplaceSellerStatusChanged.v1','seller',(string)$seller['public_id'],['from'=>$seller['status'],'to'=>$target]);
                     return true;
                 });
@@ -99,19 +102,35 @@ final class MKT_Maintenance {
     }
 
     private static function purge_retention(): void {
-        global $wpdb; $settings=MKT_DB::settings();
-        $audit_cutoff=gmdate('Y-m-d H:i:s',time()-(int)$settings['retention_audit_days']*DAY_IN_SECONDS);
+        global $wpdb;
+        $settings=MKT_DB::settings();
         $report_cutoff=gmdate('Y-m-d H:i:s',time()-(int)$settings['retention_reports_days']*DAY_IN_SECONDS);
         $dispute_cutoff=gmdate('Y-m-d H:i:s',time()-(int)$settings['retention_disputes_days']*DAY_IN_SECONDS);
-        $wpdb->query($wpdb->prepare('DELETE FROM '.MKT_DB::table('audit').' WHERE created_at<%s',$audit_cutoff));
+        // NEVER prune individual records from the tamper-evident audit chain:
+        // that requires an approved/checkpointed, verified archive protocol.
+        update_option('mkt_retention_audit_prune_state','verified_checkpoint_required',false);
+        if (!class_exists('MKT_Governance') || !MKT_Governance::hold_guard_available()) {
+            update_option('mkt_retention_last_error','legal_hold_schema_unavailable',false);
+            return; // Never interpret missing legal hold evidence as no holds.
+        }
+        $holds=MKT_Governance::table('retention_holds');
         $report_sql="UPDATE ".MKT_DB::table('reports')." r SET r.details='[Expired by retention policy]',r.evidence_refs='[]',r.decision_note='' WHERE r.updated_at<%s AND r.status='closed'";
         $dispute_sql="UPDATE ".MKT_DB::table('disputes')." d SET d.statement='[Expired by retention policy]',d.evidence_refs='[]',d.decision_note='',d.access_grants='[]' WHERE d.updated_at<%s AND d.status='closed'";
-        if (class_exists('MKT_Governance')&&MKT_Governance::table_exists('retention_holds')) {
-            $holds=MKT_Governance::table('retention_holds');
-            $report_sql.=" AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='report' AND h.object_public_id=r.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
-            $dispute_sql.=" AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='dispute' AND h.object_public_id=d.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
+        $report_sql.=" AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='report' AND h.object_public_id=r.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
+        $dispute_sql.=" AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='dispute' AND h.object_public_id=d.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
+        try {
+            MKT_DB::transaction(static function() use ($wpdb,$report_sql,$dispute_sql,$report_cutoff,$dispute_cutoff) {
+                $reports=$wpdb->query($wpdb->prepare($report_sql,$report_cutoff));
+                if ($reports===false) throw new RuntimeException('Report retention minimization query failed.');
+                $disputes=$wpdb->query($wpdb->prepare($dispute_sql,$dispute_cutoff));
+                if ($disputes===false) throw new RuntimeException('Dispute retention minimization query failed.');
+                return true;
+            });
+            delete_option('mkt_retention_last_error');
+        } catch (Throwable $e) {
+            update_option('mkt_retention_last_error','retention_minimization_failed',false);
         }
-        $wpdb->query($wpdb->prepare($report_sql,$report_cutoff)); $wpdb->query($wpdb->prepare($dispute_sql,$dispute_cutoff));
+        // Idempotency receipt expiry is separate from immutable audit history.
         $wpdb->query("DELETE FROM ".MKT_DB::table('idempotency')." WHERE expires_at<UTC_TIMESTAMP()");
     }
 
