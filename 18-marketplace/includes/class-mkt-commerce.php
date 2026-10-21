@@ -58,6 +58,14 @@ final class MKT_Commerce {
                 if (empty($seller_eligibility['eligible'])) {
                     return new WP_Error('mkt_listing_unavailable', __('The seller is no longer eligible to receive offers.', 'marketplace'), ['status' => 409]);
                 }
+                // The listing row is already locked. A locking recall read shares
+                // the current committed owner state (not an older REPEATABLE READ
+                // snapshot from an earlier idempotency SELECT).
+                $recall = MKT_Governance::recall_publication_guard((string) $fresh_listing['public_id'], true);
+                if (is_wp_error($recall)) return $recall;
+                if ($recall) {
+                    return new WP_Error('mkt_active_recall', __('An active recall prevents new Marketplace commitments.', 'marketplace'), ['status' => 409]);
+                }
                 if ($currency !== (string) $fresh_listing['currency']) {
                     return new WP_Error('mkt_invalid_offer', __('The listing currency changed. Reload before making an offer.', 'marketplace'), ['status' => 409]);
                 }
@@ -155,6 +163,13 @@ final class MKT_Commerce {
                     $seller_eligibility = MKT_Auth::seller_eligibility((int) $fresh_listing['seller_user_id']);
                     if (empty($seller_eligibility['eligible'])) {
                         return new WP_Error('mkt_listing_unavailable', __('The seller is no longer eligible to receive a counter-offer.', 'marketplace'), ['status' => 409]);
+                    }
+                    // Under the listing FOR UPDATE lock, re-check safety owner
+                    // with a locking read; countering is a NEW commerce promise.
+                    $recall = MKT_Governance::recall_publication_guard((string) $fresh_listing['public_id'], true);
+                    if (is_wp_error($recall)) return $recall;
+                    if ($recall) {
+                        return new WP_Error('mkt_active_recall', __('This listing is recalled and cannot receive a counter-offer.', 'marketplace'), ['status' => 409]);
                     }
                     if ((string) $fresh_listing['currency'] !== (string) $offer['currency']) {
                         return new WP_Error('mkt_invalid_counter', __('The listing currency changed. Reload before countering.', 'marketplace'), ['status' => 409]);
@@ -261,6 +276,13 @@ final class MKT_Commerce {
         $seller_eligibility = MKT_Auth::seller_eligibility((int) $listing['seller_user_id']);
         if (empty($seller_eligibility['eligible'])) {
             return new WP_Error('mkt_listing_unavailable', __('The seller is no longer eligible to enter a marketplace deal.', 'marketplace'), ['status' => 409]);
+        }
+        // Acceptance becomes a deal; refuse an active recall even when an offer
+        // was created before the recall. The listing is locked above.
+        $recall = MKT_Governance::recall_publication_guard((string) $listing['public_id'], true);
+        if (is_wp_error($recall)) return $recall;
+        if ($recall) {
+            return new WP_Error('mkt_active_recall', __('An active recall prevents accepting this offer.', 'marketplace'), ['status' => 409]);
         }
         $existing = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE accepted_offer_id=%d', (int) $offer['id']), ARRAY_A);
         if ($existing) {
