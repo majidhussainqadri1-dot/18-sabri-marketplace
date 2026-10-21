@@ -331,9 +331,14 @@ final class MKT_Listings {
                 // Serialise all writers per listing. A preflight COUNT outside
                 // this lock cannot enforce the limit under concurrent uploads.
                 $wpdb->last_error = '';
-                $locked = $wpdb->get_row($wpdb->prepare('SELECT id FROM ' . MKT_DB::table('listings') . ' WHERE id=%d FOR UPDATE', (int) $listing['id']), ARRAY_A);
+                $locked = $wpdb->get_row($wpdb->prepare('SELECT id,status FROM ' . MKT_DB::table('listings') . ' WHERE id=%d FOR UPDATE', (int) $listing['id']), ARRAY_A);
                 if (!is_array($locked) || $wpdb->last_error !== '') {
                     return new WP_Error('mkt_media_listing_lock_failed', __('The listing media limit could not be verified.', 'marketplace'), ['status'=>503]);
+                }
+                // State can change after the preflight get(); revalidate while
+                // holding the same canonical listing row lock as other attaches.
+                if (!in_array((string) ($locked['status'] ?? ''), ['draft','rejected','paused','appealed','expired'], true)) {
+                    return new WP_Error('mkt_media_state_locked', __('Media cannot be changed in the current listing state.', 'marketplace'), ['status'=>409]);
                 }
                 $wpdb->last_error = '';
                 $fresh_count = $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('media_refs') . ' WHERE listing_id=%d AND status=%s', (int) $listing['id'], 'active'));
