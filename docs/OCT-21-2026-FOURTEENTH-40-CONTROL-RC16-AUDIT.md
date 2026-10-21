@@ -6,9 +6,9 @@
 
 ## Findings and applied source corrections
 
-**Four related but individually testable defect groups:** (1) missing UTC expiry from public listing detail, lookup, canonical and enhanced File26 search; (2) missing locked expiry validation in offer/counter-offer/deal and in listing reactivation; (3) null/error deal commitment COUNT cast to zero; (4) two competing-offer decline UPDATE statements accepted false DB result. RC16 modifies File18 listing/finalization/commerce source with fail-closed rules, uses `MKT_Listings::not_expired()` with strict UTC parsing, and adds a runtime-shaped negative regression.
+**Six related but individually testable source defect groups:** (1) missing UTC expiry from public listing detail, lookup, canonical and enhanced File26 search; (2) missing locked expiry validation in offer/counter-offer/deal and in listing reactivation; (3) null/error deal commitment COUNT cast to zero; (4) two competing-offer decline UPDATE statements accepted false DB result. (5) Participant dashboard queries could return NULL and trigger PHP TypeError or false-empty data without a 503. (6) Seller Studio queries/COUNT results could silently display false zero quality/reports after DB errors. RC16 now returns explicit unavailability without pretending counts are zero, with safe REST/HTML handling. RC16 modifies File18 listing/finalization/commerce source with fail-closed rules, uses `MKT_Listings::not_expired()` with strict UTC parsing, and adds runtime-shaped negative regressions for expiry, deal commitment and dashboard/studio SQL outages.
 
-**40-cycle QA:** `.github/workflows/quality.yml` invokes the complete `qa-static.sh` 40 times for PHP 8.1 and 40 times for PHP 8.3 (38 stages per aggregate). This is repeated automated regression execution, **not** 40 manual independent full-system audits or proof of 58/58 central acceptance. Verify latest exact SHA, run conclusions, and deterministic RC16 package checksum after CI.
+**40-cycle QA:** `.github/workflows/quality.yml` invokes the complete `qa-static.sh` 40 times for PHP 8.1 and 40 times for PHP 8.3 (39 stages per aggregate). This is repeated automated regression execution, **not** 40 manual independent full-system audits or proof of 58/58 central acceptance. Verify latest exact SHA, run conclusions, and deterministic RC16 package checksum after CI.
 
 ## Cross-document traceability — 40 named controls
 
@@ -55,7 +55,7 @@
 | 39 | X-09 CF05 — Conditional analytics projections only | MKT_Maintenance::aggregate_metrics | Do not activate dedicated warehouse without governance |
 | 40 | X-10 CF06 — Conditional localization registry; native copy only | MKT_Plan_Completion | Do not claim full translation ops or ship unreviewed translation |
 
-**Interpretation:** Presence in source and an associated planned acceptance test do not independently prove every requirement works end-to-end. RC16 targeted expiration and transaction failure paths; each remaining requirement needs a real role/session/provider/DB verification before delivery sign-off.
+**Interpretation:** Presence in source and an associated planned acceptance test do not independently prove every requirement works end-to-end. RC16 targeted expiration, transaction failure and SQL-outage/dashboard integrity paths; each remaining requirement needs a real role/session/provider/DB verification before delivery sign-off.
 
 ## Unresolved gates and ownership
 
