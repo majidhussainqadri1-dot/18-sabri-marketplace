@@ -10,6 +10,11 @@ final class MKT_DB {
     public static function currency(string $value): string { return strtoupper($value); }
     public static function now(): string { return gmdate('Y-m-d H:i:s'); }
 }
+// This earlier expiry regression isolates the listing/COUNT failure path;
+// RC20 has a separate six-case recalled/SQL-outage commitment regression.
+final class MKT_Governance {
+    public static function recall_publication_guard(string $public_id, bool $locking_read=false): bool|WP_Error { return false; }
+}
 final class MKT_Plan_Completion {
     public static function table(): string { return 'wp_mkt_listing_fulfillment'; }
 }

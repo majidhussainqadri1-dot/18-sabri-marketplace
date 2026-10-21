@@ -54,6 +54,12 @@ final class MKT_Admin {
             $table_status[$table] = MKT_DB::table_exists($table);
             $checks[] = ['id' => 'table_' . $table, 'label' => 'Table: ' . $table, 'pass' => $table_status[$table], 'severity' => 'blocker'];
         }
+        // A table-name inventory cannot attest columns, unique indexes, or
+        // partially applied governance/facet migrations. These exact owner
+        // schema checks are blocking even if wp_options claims a version.
+        $checks[] = ['id'=>'core_schema_truth','label'=>'File 18 canonical core schema verified','pass'=>MKT_DB::schema_ready(),'severity'=>'blocker'];
+        $checks[] = ['id'=>'governance_schema_truth','label'=>'File 18 recall/evidence/hold schema verified','pass'=>MKT_Governance::schema_ready(),'severity'=>'blocker'];
+        $checks[] = ['id'=>'facet_schema_truth','label'=>'File 18 language facets schema verified','pass'=>MKT_Plan_Completion::schema_ready(),'severity'=>'blocker'];
         $integrations = MKT_Integrations::status();
         $checks[] = ['id' => 'identity', 'label' => 'File 00 identity contract', 'pass' => !empty($integrations['identity']['available']), 'severity' => 'blocker'];
         $checks[] = ['id' => 'communication', 'label' => 'File 17 product-linked conversation contract', 'pass' => !empty($integrations['communication']['available']), 'severity' => 'blocker'];
@@ -88,7 +94,10 @@ final class MKT_Admin {
         global $wpdb;
         foreach (['listings','offers','deals'] as $name) {
             if (!MKT_DB::table_exists($name)) return true;
-            $columns = (array) $wpdb->get_col('DESCRIBE ' . MKT_DB::table($name), 0);
+            $wpdb->last_error = '';
+            $columns = $wpdb->get_col('DESCRIBE ' . MKT_DB::table($name), 0);
+            // A broken DESCRIBE is not evidence of constitutional zero fees.
+            if (!is_array($columns) || !$columns || $wpdb->last_error !== '') return true;
             foreach ($columns as $column) {
                 if (str_contains(strtolower((string) $column), 'commission')) return true;
             }

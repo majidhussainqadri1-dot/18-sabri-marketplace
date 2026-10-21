@@ -1,5 +1,14 @@
 # File 18 — Marketplace Release Status (20 October 2026)
 
+## RC20 — Eighteenth 40-control source audit (22 Oct 2026)
+
+- Four new independently scoped source defects addressed: transactional recall safety on **create offer**, **counter-offer**, and **accept-offer-to-deal**; **false-ready status from partial schema/commission SQL outage**.
+- Review source: `docs/OCT-22-2026-EIGHTEENTH-40-CONTROL-RC20-AUDIT.md`; 40 named plan/companion owner checkpoints (30 File18 requirements + 10 owner/conditional). No silent claim of 58 central CV acceptance.
+- QA: add 2 actual-class negative programs, total `qa-static.sh` **47 stages**, intended **40 whole repeated QA rounds per PHP 8.1/8.3** on exact final HEAD. Record final CI result/hash after completed GitHub run.
+- Source candidate: **Draft stacked PR #22 / RC20**, plugin metadata `2.1.0`. `main` not updated and no deployment authorized.
+- Open release blockers: **#17** WordPress live-state retrieval Cloudflare HTTP 530 + no registered WPVibe site; **#18** immutable audit-chain archive/checkpoint governance; plus deployed version/DB/migration/parity evidence, staging MySQL concurrency, real owner services and security/RTL/performance acceptance, backup/rollback and Founder approval.
+- Truth statement: **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
 ## RC18 — Sixteenth plan/owner 40-control audit, 22 October 2026
 
 - New source-confirmed defects **4**; source-corrected **4/4**: bypassed publication prerequisites on direct listing submit and admin activation; non-atomic wp-admin moderation audit/events; stale/partial File18 language facet schema falsely verified by `wp_options`.
