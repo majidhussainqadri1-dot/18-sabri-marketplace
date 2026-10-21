@@ -57,6 +57,18 @@ final class MKT_Governance {
             $wpdb->last_error = '';
             $found = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table($name), 0);
             if (!is_array($found) || array_diff($columns, $found) || $wpdb->last_error !== '') return false;
+            // Columns without their unique constraints are NOT a deployable
+            // canonical owner schema: duplicate evidence/public IDs would pass.
+            $wpdb->last_error = '';
+            $indexes = $wpdb->get_results('SHOW INDEX FROM ' . self::table($name), ARRAY_A);
+            if (!is_array($indexes) || $wpdb->last_error !== '') return false;
+            $unique = [];
+            foreach ($indexes as $index) {
+                if ((int) ($index['Non_unique'] ?? 1) !== 0 || (int) ($index['Seq_in_index'] ?? 0) !== 1) continue;
+                $unique[(string) ($index['Key_name'] ?? '')] = (string) ($index['Column_name'] ?? '');
+            }
+            $required_unique = $name === 'listing_evidence' ? 'listing_public_id' : 'public_id';
+            if (($unique['PRIMARY'] ?? '') !== 'id' || ($unique[$required_unique] ?? '') !== $required_unique) return false;
         }
         return true;
     }
