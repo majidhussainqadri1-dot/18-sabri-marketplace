@@ -49,4 +49,9 @@ assert_same(0,$wpdb->writes,'Direct activation must not write active status befo
 assert_same(2,MKT_Plan_Completion::$calls,'Owner transition independently invokes canonical publication gate.');
 $source=file_get_contents(dirname(__DIR__).'/includes/class-mkt-plan-completion.php');
 assert_true(str_contains($source,'public static function publication_gate(string $listing_public_id)'), 'Canonical publication gate is exposed for other File18 PHP owner entry points.');
-fwrite(STDOUT,"RC18 canonical publication on direct owner paths regression passed.\n");
+$admin=file_get_contents(dirname(__DIR__).'/includes/class-mkt-admin.php');
+$begin=strpos($admin,'public static function handle_moderation_action');
+$end=strpos($admin,'public static function handle_policy_save',$begin);
+$handler=substr($admin,$begin,$end-$begin);
+assert_true(str_contains($handler,'MKT_DB::transaction(static function()') && str_contains($handler,'mkt_moderation_atomic_failed'), 'Native wp-admin moderation commits listing/report/dispute transitions with audit in one local transaction.');
+fwrite(STDOUT,"RC18 canonical publication and atomic wp-admin moderation source regression passed.\n");
