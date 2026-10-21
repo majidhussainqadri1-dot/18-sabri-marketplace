@@ -135,13 +135,42 @@ final class MKT_Maintenance {
     }
 
     private static function aggregate_metrics(): void {
-        global $wpdb; $date=gmdate('Y-m-d',time()-DAY_IN_SECONDS);
-        $metrics=[
-            'active_listings'=>(int)$wpdb->get_var("SELECT COUNT(*) FROM ".MKT_DB::table('listings')." WHERE status='active'"),
-            'offers_created'=>(int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('offers').' WHERE DATE(created_at)=%s',$date)),
-            'deals_accepted'=>(int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('deals').' WHERE DATE(created_at)=%s',$date)),
-            'reports_created'=>(int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('reports').' WHERE DATE(created_at)=%s',$date)),
+        global $wpdb;
+        $date=gmdate('Y-m-d',time()-DAY_IN_SECONDS);
+        // Metrics are derivative operational projections, never a second
+        // CF05 analytics owner. A failed COUNT is unknown, not a true zero.
+        $queries=[
+            'active_listings'=>"SELECT COUNT(*) FROM ".MKT_DB::table('listings')." WHERE status='active'",
+            'offers_created'=>$wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('offers').' WHERE DATE(created_at)=%s',$date),
+            'deals_accepted'=>$wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('deals').' WHERE DATE(created_at)=%s',$date),
+            'reports_created'=>$wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('reports').' WHERE DATE(created_at)=%s',$date),
         ];
-        foreach ($metrics as $key=>$value) $wpdb->replace(MKT_DB::table('metrics_daily'),['metric_date'=>$date,'metric_key'=>$key,'dimension_hash'=>hash('sha256','global'),'value_count'=>$value,'value_sum'=>0,'metadata_json'=>'{}','updated_at'=>MKT_DB::now()]);
+        $metrics=[];
+        foreach ($queries as $key=>$sql) {
+            $wpdb->last_error='';
+            $value=$wpdb->get_var($sql);
+            if ($value===null || $wpdb->last_error!=='' || !is_numeric($value) || (int)$value<0) {
+                update_option('mkt_metrics_last_error','source_count_unavailable',false);
+                return;
+            }
+            $metrics[$key]=(int)$value;
+        }
+        try {
+            MKT_DB::transaction(static function() use ($wpdb,$date,$metrics) {
+                foreach ($metrics as $key=>$value) {
+                    $written=$wpdb->replace(MKT_DB::table('metrics_daily'),[
+                        'metric_date'=>$date,'metric_key'=>$key,'dimension_hash'=>hash('sha256','global'),
+                        'value_count'=>$value,'value_sum'=>0,'metadata_json'=>'{}','updated_at'=>MKT_DB::now()
+                    ]);
+                    if ($written===false || (int)$written<1) {
+                        throw new RuntimeException('Marketplace metric projection failed.');
+                    }
+                }
+                return true;
+            });
+            delete_option('mkt_metrics_last_error');
+        } catch (Throwable $e) {
+            update_option('mkt_metrics_last_error','projection_write_failed',false);
+        }
     }
 }
