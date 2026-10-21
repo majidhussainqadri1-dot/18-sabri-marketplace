@@ -527,22 +527,31 @@ final class MKT_Governance {
         if ($reason === '') return new WP_Error('mkt_recall_reason_required', __('A recall reason is required.', 'marketplace'), ['status' => 422]);
         global $wpdb;
         $public_id = MKT_DB::uuid();
-        $inserted = $wpdb->insert(self::table('recalls'), [
-            'public_id' => $public_id,
-            'listing_public_id' => $listing_public_id,
-            'batch_ref' => mb_substr(sanitize_text_field((string) ($input['batch_ref'] ?? '')), 0, 120),
-            'reason' => $reason,
-            'details' => wp_kses_post((string) ($input['details'] ?? '')),
-            'regulator_reference' => mb_substr(sanitize_text_field((string) ($input['regulator_reference'] ?? '')), 0, 190),
-            'status' => 'draft',
-            'version' => 1,
-            'created_by' => $actor_id,
-            'created_at' => MKT_DB::now(),
-            'updated_at' => MKT_DB::now(),
-        ]);
-        if (!$inserted) return new WP_Error('mkt_recall_create_failed', __('Recall record could not be created.', 'marketplace'), ['status' => 500]);
-        MKT_Audit::record('recall_created', 'listing', $listing_public_id, ['recall_public_id' => $public_id, 'reason' => $reason], 'success', '', 'marketplace_safety');
-        return self::recall_record($public_id);
+        try {
+            return MKT_DB::transaction(static function() use ($wpdb, $public_id, $listing_public_id, $input, $reason, $actor_id) {
+                $inserted = $wpdb->insert(self::table('recalls'), [
+                    'public_id' => $public_id,
+                    'listing_public_id' => $listing_public_id,
+                    'batch_ref' => mb_substr(sanitize_text_field((string) ($input['batch_ref'] ?? '')), 0, 120),
+                    'reason' => $reason,
+                    'details' => wp_kses_post((string) ($input['details'] ?? '')),
+                    'regulator_reference' => mb_substr(sanitize_text_field((string) ($input['regulator_reference'] ?? '')), 0, 190),
+                    'status' => 'draft',
+                    'version' => 1,
+                    'created_by' => $actor_id,
+                    'created_at' => MKT_DB::now(),
+                    'updated_at' => MKT_DB::now(),
+                ]);
+                if ($inserted !== 1) {
+                    return new WP_Error('mkt_recall_create_failed', __('Recall record could not be created.', 'marketplace'), ['status' => 503]);
+                }
+                MKT_Audit::record('recall_created', 'listing', $listing_public_id, ['recall_public_id' => $public_id, 'reason' => $reason], 'success', '', 'marketplace_safety');
+                $created = self::recall_record($public_id);
+                return $created ?: new WP_Error('mkt_recall_readback_failed', __('The recall record could not be verified.', 'marketplace'), ['status' => 503]);
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_recall_create_failed', __('The recall could not be saved and audited safely.', 'marketplace'), ['status' => 503]);
+        }
     }
 
     public static function transition_recall(string $public_id, array $input, int $actor_id): array|WP_Error {
@@ -629,21 +638,45 @@ final class MKT_Governance {
         $existing = $wpdb->get_var($wpdb->prepare("SELECT public_id FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP() LIMIT 1", $object_type, $object_public_id));
         if ($existing) return new WP_Error('mkt_hold_exists', __('An active retention hold already exists for this object.', 'marketplace'), ['status' => 409, 'public_id' => (string) $existing]);
         $public_id = MKT_DB::uuid();
-        $inserted = $wpdb->insert(self::table('retention_holds'), [
-            'public_id' => $public_id,
-            'object_type' => $object_type,
-            'object_public_id' => $object_public_id,
-            'reason' => $reason,
-            'authority_reference' => $authority,
-            'status' => 'active',
-            'created_by' => $actor_id,
-            'expires_at' => gmdate('Y-m-d H:i:s', $expires),
-            'created_at' => MKT_DB::now(),
-            'updated_at' => MKT_DB::now(),
-        ]);
-        if (!$inserted) return new WP_Error('mkt_hold_create_failed', __('Retention hold could not be created.', 'marketplace'), ['status' => 500]);
-        MKT_Audit::record('retention_hold_created', $object_type, $object_public_id, ['hold_public_id' => $public_id, 'reason' => $reason, 'expires_at' => gmdate('c', $expires)], 'success', '', 'legal_safety_hold');
-        return ['public_id' => $public_id, 'object_type' => $object_type, 'object_public_id' => $object_public_id, 'status' => 'active', 'expires_at' => gmdate('Y-m-d H:i:s', $expires)];
+        try {
+            return MKT_DB::transaction(static function() use ($wpdb, $public_id, $object_type, $object_public_id, $reason, $authority, $actor_id, $expires) {
+                // There is no unique partial index for active, unexpired holds:
+                // serialize by canonical object and recheck UNDER the named lock.
+                // Keep the lock through owner COMMIT/ROLLBACK via MKT_DB.
+                $hold_lock = 'mkt_hold_' . substr(hash('sha256', $object_type . ':' . $object_public_id), 0, 48);
+                $acquired = $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, %d)', $hold_lock, 4));
+                if ((string) $acquired !== '1') {
+                    return new WP_Error('mkt_hold_lock_unavailable', __('Another retention-hold change is in progress.', 'marketplace'), ['status' => 503]);
+                }
+                MKT_DB::release_named_lock_after_transaction($hold_lock);
+                $current = $wpdb->get_var($wpdb->prepare(
+                    "SELECT public_id FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP() LIMIT 1",
+                    $object_type, $object_public_id
+                ));
+                if ($current) {
+                    return new WP_Error('mkt_hold_exists', __('An active retention hold already exists for this object.', 'marketplace'), ['status' => 409, 'public_id' => (string) $current]);
+                }
+                $inserted = $wpdb->insert(self::table('retention_holds'), [
+                    'public_id' => $public_id,
+                    'object_type' => $object_type,
+                    'object_public_id' => $object_public_id,
+                    'reason' => $reason,
+                    'authority_reference' => $authority,
+                    'status' => 'active',
+                    'created_by' => $actor_id,
+                    'expires_at' => gmdate('Y-m-d H:i:s', $expires),
+                    'created_at' => MKT_DB::now(),
+                    'updated_at' => MKT_DB::now(),
+                ]);
+                if ($inserted !== 1) {
+                    return new WP_Error('mkt_hold_create_failed', __('Retention hold could not be created.', 'marketplace'), ['status' => 503]);
+                }
+                MKT_Audit::record('retention_hold_created', $object_type, $object_public_id, ['hold_public_id' => $public_id, 'reason' => $reason, 'expires_at' => gmdate('c', $expires)], 'success', '', 'legal_safety_hold');
+                return ['public_id' => $public_id, 'object_type' => $object_type, 'object_public_id' => $object_public_id, 'status' => 'active', 'expires_at' => gmdate('Y-m-d H:i:s', $expires)];
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_hold_create_failed', __('The legal hold could not be saved and audited safely.', 'marketplace'), ['status' => 503]);
+        }
     }
 
     public static function release_hold(string $public_id, array $input, int $actor_id): array|WP_Error {
@@ -655,15 +688,23 @@ final class MKT_Governance {
         if ((string) $row['status'] !== 'active') return ['public_id' => $public_id, 'status' => (string) $row['status']];
         $reason = mb_substr(sanitize_text_field((string) ($input['reason'] ?? '')), 0, 190);
         if ($reason === '') return new WP_Error('mkt_hold_release_reason_required', __('A release reason is required.', 'marketplace'), ['status' => 422]);
-        $updated = $wpdb->update(self::table('retention_holds'), [
-            'status' => 'released',
-            'released_by' => $actor_id,
-            'released_at' => MKT_DB::now(),
-            'updated_at' => MKT_DB::now(),
-        ], ['id' => (int) $row['id'], 'status' => 'active']);
-        if ($updated !== 1) return new WP_Error('mkt_hold_release_conflict', __('Retention hold changed.', 'marketplace'), ['status' => 409]);
-        MKT_Audit::record('retention_hold_released', (string) $row['object_type'], (string) $row['object_public_id'], ['hold_public_id' => $public_id, 'release_reason' => $reason], 'success', '', 'legal_safety_hold');
-        return ['public_id' => $public_id, 'status' => 'released'];
+        try {
+            return MKT_DB::transaction(static function() use ($wpdb, $row, $actor_id, $public_id, $reason) {
+                $updated = $wpdb->update(self::table('retention_holds'), [
+                    'status' => 'released',
+                    'released_by' => $actor_id,
+                    'released_at' => MKT_DB::now(),
+                    'updated_at' => MKT_DB::now(),
+                ], ['id' => (int) $row['id'], 'status' => 'active']);
+                if ($updated !== 1) {
+                    return new WP_Error('mkt_hold_release_conflict', __('Retention hold changed.', 'marketplace'), ['status' => 409]);
+                }
+                MKT_Audit::record('retention_hold_released', (string) $row['object_type'], (string) $row['object_public_id'], ['hold_public_id' => $public_id, 'release_reason' => $reason], 'success', '', 'legal_safety_hold');
+                return ['public_id' => $public_id, 'status' => 'released'];
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_hold_release_failed', __('The hold release could not be saved and audited safely.', 'marketplace'), ['status' => 503]);
+        }
     }
 
     private static function retention_authorization(string $action) {

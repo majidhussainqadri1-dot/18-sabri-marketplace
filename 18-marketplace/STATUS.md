@@ -26,3 +26,7 @@ Required File19 recipient acknowledgement now gates Marketplace outbox completio
 ## Fifth forty-scope review / RC7 (21 October 2026)
 
 Draft PR #7 now implements canonical File17 REST owner conversation + listing context authorization and refreshed current price projection, detects File19 SUN availability, and rejects false-positive durable idempotency receipt writes. Two additional PHP negative integration simulations are in the full aggregate QA and the 40-round per-PHP workflow. Source anchors are present for 40 scopes, not proof of complete central requirement acceptance. See root `docs/OCT-21-2026-FIFTH-40-SCOPE-RC7-REVIEW.md`. Do not reuse RC6 artifact or mark the live site resolved. Deployed plugin checksum, DB/schema, migration and live acceptance unverified.
+
+## Seventh plan-to-code review (21 Oct 2026)
+
+Four source-proven defects corrected in the RC9 Draft PR #9 (recall/audit atomicity; legal hold/audit atomicity; seller eligibility write/readback fail-closed; duplicate hold concurrent creation via canonical named lock). Two direct actual-class fault-injection tests + one forty-domain source-presence check run in aggregate QA, configured for 40 repeats on each PHP 8.1/8.3 CI job. Source presence and stub simulations do not establish functional completeness, real MySQL races, staging acceptance or deployment. Full report: `docs/OCT-21-2026-SEVENTH-40-SCOPE-RC9-AUDIT.md`. No main merge, live package parity, backup restore, migration proof, Founder approval or Live Re-Test.
