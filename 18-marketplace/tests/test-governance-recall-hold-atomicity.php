@@ -11,6 +11,8 @@ class MKT_Auth {public static function can($cap,array $ctx=[]){return true;}}
 class MKT_Listings {public static function get(string $id,bool $private=false):?array{return $id==='listing_99'?['public_id'=>$id,'seller_user_id'=>51]:null;}}
 class MKT_DB {
  private static int $counter=0;
+ private static array $deferred=[];
+ public static function release_named_lock_after_transaction(string $name):void{self::$deferred[]=$name;}
  public static function uuid():string{return '00000000-0000-4000-8000-'.str_pad((string) (++self::$counter),12,'0',STR_PAD_LEFT);}
  public static function now():string{return '2026-10-21 09:00:00';}
  public static function table(string $name):string{return 'wp_mkt_'.$name;}
@@ -22,6 +24,7 @@ class MKT_DB {
    if(is_wp_error($result)||$result===false){[$wpdb->recalls,$wpdb->holds]=$old;$wpdb->ops[]='ROLLBACK';return $result;}
    $wpdb->ops[]='COMMIT';return $result;
   }catch(Throwable $e){[$wpdb->recalls,$wpdb->holds]=$old;$wpdb->ops[]='ROLLBACK';throw $e;}
+  finally {while(self::$deferred){array_pop(self::$deferred);$wpdb->ops[]='UNLOCK';}}
  }
 }
 class MKT_Audit {
@@ -39,9 +42,17 @@ class FakeGovDB {
  public array $holds=[];
  public bool $insert_fail=false;
  public bool $update_fail=false;
+ public bool $parallel_hold_on_recheck=false;
+ public int $hold_lookup_count=0;
  public function prepare(string $s,...$args):string{return vsprintf(str_replace(['%s','%d'],["'%s'",'%d'],$s),$args);}
  public function get_var(string $sql) {
-  if(str_contains($sql,'SELECT public_id FROM wp_mkt_retention_holds'))return null;
+  if(str_contains($sql,'GET_LOCK')){$this->ops[]='LOCK';return 1;}
+  if(str_contains($sql,'SELECT public_id FROM wp_mkt_retention_holds')){
+   $this->hold_lookup_count++;
+   if($this->parallel_hold_on_recheck&&$this->hold_lookup_count===2)return 'concurrent-existing-hold';
+   foreach($this->holds as $row)if(($row['status']??'')==='active')return (string)$row['public_id'];
+   return null;
+  }
   if(str_contains($sql,'SELECT COUNT(*)'))return 1;
   return null;
  }
@@ -87,11 +98,11 @@ MKT_Audit::$fail=true;$wpdb->ops=[];
 $bad=MKT_Governance::create_hold($hold,23);
 assert_true(is_wp_error($bad),'Hold audit error returns failure.');
 assert_same(0,count($wpdb->holds),'Failed legal hold audit does not leave an unaudited hold.');
-assert_same(['BEGIN','INSERT','AUDIT','ROLLBACK'],$wpdb->ops,'Legal hold creation rolls back after audit error.');
+assert_same(['BEGIN','LOCK','INSERT','AUDIT','ROLLBACK','UNLOCK'],$wpdb->ops,'Legal hold rollback releases the per-object lock afterward.');
 MKT_Audit::$fail=false;$wpdb->ops=[];
 $ok=MKT_Governance::create_hold($hold,23);
 assert_true(is_array($ok),'Valid active hold succeeds.');
-assert_same(['BEGIN','INSERT','AUDIT','COMMIT'],$wpdb->ops,'Hold is committed atomically with audit.');
+assert_same(['BEGIN','LOCK','INSERT','AUDIT','COMMIT','UNLOCK'],$wpdb->ops,'Hold is committed with audit before the object lock is released.');
 $holdId=$ok['public_id'];
 MKT_Audit::$fail=true;$wpdb->ops=[];
 $no=MKT_Governance::release_hold($holdId,['reason'=>'Order superseded'],23);
@@ -103,4 +114,9 @@ $yes=MKT_Governance::release_hold($holdId,['reason'=>'Order superseded'],23);
 assert_same('released',$yes['status'],'Audited legal hold release succeeds.');
 assert_same('released',$wpdb->holds[$holdId]['status'],'Canonical hold status updated.');
 assert_same(['BEGIN','UPDATE','AUDIT','COMMIT'],$wpdb->ops,'Audited hold release commits.');
+$wpdb->parallel_hold_on_recheck=true;$wpdb->hold_lookup_count=0;$wpdb->ops=[];
+$blocked=MKT_Governance::create_hold($hold,23);
+assert_same('mkt_hold_exists',$blocked->get_error_code(),'A competing active legal hold discovered after acquiring object lock is rejected.');
+assert_true(in_array('UNLOCK',$wpdb->ops,true),'The object serialization lock is released when the competing hold blocks creation.');
+$wpdb->parallel_hold_on_recheck=false;
 fwrite(STDOUT,"File18 governance recall and legal-hold atomicity fault injection complete.\n");
