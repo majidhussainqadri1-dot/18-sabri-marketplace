@@ -103,17 +103,20 @@ final class MKT_Events {
             } catch (Throwable $e) {
                 $error = mb_substr($e->getMessage(), 0, 240);
             }
+            // Fence the claim by its exact lease. A slow worker must never
+            // overwrite the result of a later worker that recovered its lease.
+            $lease_where = ['id' => $id, 'status' => 'processing', 'available_at' => $lease_until];
             if ($ok) {
-                $wpdb->update($table, ['status' => 'processed', 'processed_at' => MKT_DB::now(), 'last_error' => ''], ['id' => $id, 'status' => 'processing']);
+                $wpdb->update($table, ['status' => 'processed', 'processed_at' => MKT_DB::now(), 'last_error' => ''], $lease_where);
             } elseif ($attempts >= 8) {
-                $wpdb->update($table, ['status' => 'dead', 'last_error' => $error ?: 'No consumer acknowledged the event.'], ['id' => $id, 'status' => 'processing']);
+                $wpdb->update($table, ['status' => 'dead', 'last_error' => $error ?: 'No consumer acknowledged the event.'], $lease_where);
             } else {
                 $delay = min(3600, 30 * (2 ** min($attempts, 6)));
                 $wpdb->update($table, [
                     'status' => 'retry',
                     'available_at' => gmdate('Y-m-d H:i:s', time() + $delay),
                     'last_error' => $error ?: 'Retry scheduled.',
-                ], ['id' => $id, 'status' => 'processing']);
+                ], $lease_where);
             }
         }
     }
@@ -252,13 +255,27 @@ final class MKT_Events {
             if ((string) $existing['status'] === 'processed') {
                 return true;
             }
-            if ((string) $existing['status'] !== 'failed') {
+            $existing_status = (string) $existing['status'];
+            // A crash after INSERT IGNORE but before the owner transaction used
+            // to strand the event forever as 'received'. Reclaim only after a
+            // conservative timeout, with a compare-and-swap on the observed time.
+            if ($existing_status === 'received') {
+                $stale_at = (string) ($existing['received_at'] ?? '');
+                if (!$stale_at || strtotime($stale_at . ' UTC') > time() - 300) {
+                    return new WP_Error('mkt_event_in_progress', __('The event is already being processed.', 'marketplace'));
+                }
+                $reclaimed = $wpdb->query($wpdb->prepare(
+                    "UPDATE " . MKT_DB::table('inbox') . " SET received_at=%s WHERE id=%d AND status='received' AND received_at=%s AND received_at<=DATE_SUB(UTC_TIMESTAMP(), INTERVAL 300 SECOND)",
+                    MKT_DB::now(), (int) $existing['id'], $stale_at
+                ));
+            } elseif ($existing_status === 'failed') {
+                $reclaimed = $wpdb->query($wpdb->prepare(
+                    "UPDATE " . MKT_DB::table('inbox') . " SET status='received',received_at=%s WHERE id=%d AND status='failed' AND payload_hash=%s",
+                    MKT_DB::now(), (int) $existing['id'], $payload_hash
+                ));
+            } else {
                 return new WP_Error('mkt_event_in_progress', __('The event is already being processed.', 'marketplace'));
             }
-            $reclaimed = $wpdb->query($wpdb->prepare(
-                "UPDATE " . MKT_DB::table('inbox') . " SET status='received',received_at=%s WHERE id=%d AND status='failed'",
-                MKT_DB::now(), (int) $existing['id']
-            ));
             if ($reclaimed !== 1) {
                 return new WP_Error('mkt_event_in_progress', __('The failed event is already being retried.', 'marketplace'));
             }
@@ -266,7 +283,21 @@ final class MKT_Events {
         try {
             // Owner mutation, mandatory audit, and inbox acknowledgement must commit
             // atomically. Otherwise a failed report/audit write can be replayed twice.
-            $result = MKT_DB::transaction(static function() use ($handler, $event, $wpdb, $source, $event_id) {
+            $result = MKT_DB::transaction(static function() use ($handler, $event, $wpdb, $source, $event_id, $payload_hash) {
+                // The inbox row is the serialization point for at-least-once
+                // events. A stale worker/retry must wait and then recheck truth
+                // before executing any domain-side effects.
+                $locked = $wpdb->get_row($wpdb->prepare(
+                    'SELECT status,payload_hash FROM ' . MKT_DB::table('inbox') . ' WHERE source=%s AND event_id=%s FOR UPDATE',
+                    sanitize_key($source), $event_id
+                ), ARRAY_A);
+                if (!$locked || !hash_equals((string) $locked['payload_hash'], $payload_hash)) {
+                    return new WP_Error('mkt_event_inbox_conflict', 'The inbox event reservation changed before execution.');
+                }
+                if ((string) $locked['status'] === 'processed') return true;
+                if ((string) $locked['status'] !== 'received') {
+                    return new WP_Error('mkt_event_in_progress', 'The inbox event is not reserved for processing.');
+                }
                 $handled = $handler($event);
                 if (is_wp_error($handled)) {
                     return $handled;

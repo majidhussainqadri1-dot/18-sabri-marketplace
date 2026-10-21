@@ -23,31 +23,35 @@ final class MKT_Idempotency {
                 return new WP_Error('mkt_idempotency_conflict', __('The Idempotency-Key was already used with different request data.', 'marketplace'), ['status' => 409]);
             }
             if ((string) $row['status'] === 'completed') {
-                $cached = json_decode((string) $row['response_json'], true);
-                return $cached ?? true;
+                $cached = json_decode((string) ($row['response_json'] ?? ''), true);
+                // A corrupt durable receipt must never turn into a fabricated
+                // successful response (the former '?? true' path).
+                if (json_last_error() !== JSON_ERROR_NONE || $cached === null) {
+                    return new WP_Error('mkt_idempotency_receipt_corrupt', __('The previous request receipt cannot be verified. Contact support before retrying.', 'marketplace'), ['status' => 503]);
+                }
+                return $cached;
             }
             $previous_status = (string) $row['status'];
             $previous_expiry = (string) $row['expires_at'];
             $processing_expired = $previous_status === 'processing' && strtotime($previous_expiry) <= time();
-            $claimable = $previous_status === 'failed' || $processing_expired;
+            // A stale processing receipt may belong to a committed owner
+            // mutation whose final receipt UPDATE failed. Blindly reclaiming
+            // it could duplicate an offer, report, media link or payment fact.
+            if ($processing_expired) {
+                return new WP_Error('mkt_idempotency_outcome_uncertain', __('The earlier request may have completed. Its outcome requires reconciliation before retrying.', 'marketplace'), ['status' => 409]);
+            }
+            $claimable = $previous_status === 'failed';
             if (!$claimable) {
                 return new WP_Error('mkt_request_in_progress', __('An identical request is already in progress.', 'marketplace'), ['status' => 409, 'retry_after' => 2]);
             }
 
             $new_expiry = gmdate('Y-m-d H:i:s', time() + DAY_IN_SECONDS);
-            if ($previous_status === 'processing') {
-                // Compare-and-swap on the observed lease. A concurrent retry that already
-                // renewed the lease can no longer match this exact expired row.
-                $claimed = $wpdb->query($wpdb->prepare(
-                    "UPDATE {$table} SET status='processing',response_code=0,response_json=NULL,created_at=%s,expires_at=%s WHERE id=%d AND status='processing' AND expires_at=%s AND expires_at<=UTC_TIMESTAMP()",
-                    MKT_DB::now(), $new_expiry, (int) $row['id'], $previous_expiry
-                ));
-            } else {
-                $claimed = $wpdb->query($wpdb->prepare(
-                    "UPDATE {$table} SET status='processing',response_code=0,response_json=NULL,created_at=%s,expires_at=%s WHERE id=%d AND status='failed' AND request_hash=%s",
-                    MKT_DB::now(), $new_expiry, (int) $row['id'], $request_hash
-                ));
-            }
+            // A failed request is retryable only when its stored status
+            // positively confirms failure. A processing/unknown outcome is not.
+            $claimed = $wpdb->query($wpdb->prepare(
+                "UPDATE {$table} SET status='processing',response_code=0,response_json=NULL,created_at=%s,expires_at=%s WHERE id=%d AND status='failed' AND request_hash=%s",
+                MKT_DB::now(), $new_expiry, (int) $row['id'], $request_hash
+            ));
             if ($claimed !== 1) {
                 return new WP_Error('mkt_request_in_progress', __('An identical request is already being retried.', 'marketplace'), ['status' => 409, 'retry_after' => 2]);
             }

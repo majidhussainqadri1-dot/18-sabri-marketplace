@@ -48,7 +48,7 @@ foreach ([$rest, $governance, $release, $completion] as $source) {
 }
 assert_true(str_contains($rest, "get_header('X-WP-Nonce')"), 'Core REST path reads request-scoped nonce.');
 
-assert_true(str_contains($events, 'MKT_DB::transaction(static function() use ($handler, $event, $wpdb, $source, $event_id)'), 'External event handler and inbox acknowledgement share a transaction.');
+assert_true(str_contains($events, 'MKT_DB::transaction(static function() use ($handler, $event, $wpdb, $source, $event_id, $payload_hash)'), 'External event handler and inbox acknowledgement share a transaction.');
 assert_true(str_contains($events, "'status' => 'received'"), 'Event acknowledgement uses expected inbox state.');
 assert_true(str_contains($events, "mkt_event_acknowledgement_failed"), 'Failed acknowledgement cannot return success.');
 assert_true(str_contains($events, "apply_filters('mkt_event_acknowledged', false, $" . 'event)'), 'Local consumption needs explicit acknowledgement.');
@@ -113,4 +113,11 @@ assert_true(str_contains($listings, 'private static function validate_numeric_in
 assert_true(substr_count($commerce, "is_numeric($" . "input['amount'] ?? null)") === 2,
     'Offer and counteroffer inputs reject partially numeric strings rather than casting them.');
 
+assert_true(str_contains($events, "FOR UPDATE") && str_contains($events, 'RECLAIM_STALE') === false
+    && str_contains($events, 'INTERVAL 300 SECOND'), 'Inbox supports bounded stale recovery under a transactional row lock.');
+assert_true(str_contains($events, "$" . "lease_where =") && str_contains($events, "'available_at' => $" . "lease_until"), 'Outbox final outcomes are fenced by their exact processing lease.');
+assert_true(str_contains($listings, "MKT_DB::transaction(static function() use ($" . "wpdb, $" . "ref_id, $" . "listing") &&
+    str_contains($listings, "if (is_wp_error($" . "removed)) return $" . "removed;"), 'Media creation/removal and audit are atomic before external release.');
+$idempotency = $read('class-mkt-idempotency.php');
+assert_true(str_contains($idempotency, 'mkt_idempotency_receipt_corrupt') && str_contains($idempotency, 'mkt_idempotency_outcome_uncertain'), 'Malformed or uncertain cached requests are never false-positive success.');
 fwrite(STDOUT, "October forty-scope corrective invariants complete.\n");
