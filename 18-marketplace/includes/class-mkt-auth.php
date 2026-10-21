@@ -23,10 +23,15 @@ final class MKT_Auth {
         if (!$assertions['approved'] || !$assertions['verified'] || $assertions['suspended']) {
             return new WP_Error('mkt_account_not_eligible', __('An approved and verified account is required for this action.', 'marketplace'), ['status' => 403]);
         }
-        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)) {
-            return new WP_Error('mkt_account_risk_hold', __('This action is unavailable while the account is under a marketplace risk hold.', 'marketplace'), ['status' => 403]);
+        // The canonical File00 owner must positively classify risk and
+        // minor/guardian state. Unknown is not a verified adult/no-risk grant.
+        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical','unknown'], true)) {
+            return new WP_Error('mkt_account_risk_hold', __('Marketplace risk verification is required for this action.', 'marketplace'), ['status' => 403]);
         }
-        if (!empty($assertions['is_minor']) && empty($assertions['guardian_verified'])) {
+        if ($assertions['is_minor'] === null) {
+            return new WP_Error('mkt_age_verification_required', __('Marketplace age and guardian eligibility could not be verified.', 'marketplace'), ['status' => 403]);
+        }
+        if ($assertions['is_minor'] === true && !$assertions['guardian_verified']) {
             return new WP_Error('mkt_guardian_required', __('Verified guardian consent is required for this action.', 'marketplace'), ['status' => 403]);
         }
 
@@ -60,10 +65,12 @@ final class MKT_Auth {
         if ($assertions['suspended']) {
             $reasons[] = 'account_suspended';
         }
-        if (!empty($assertions['is_minor']) && empty($assertions['guardian_verified'])) {
+        if ($assertions['is_minor'] === null) {
+            $reasons[] = 'age_guardian_unverified';
+        } elseif ($assertions['is_minor'] === true && !$assertions['guardian_verified']) {
             $reasons[] = 'guardian_unverified';
         }
-        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical'], true)) {
+        if (in_array((string) $assertions['risk_state'], ['blocked','high','critical','unknown'], true)) {
             $reasons[] = 'risk_hold';
         }
         $eligible = !$reasons && (user_can($user_id, 'mkt_sell') || in_array('mkt_sell', (array) $assertions['capabilities'], true) || apply_filters('mkt_seller_eligibility', false, $user_id, $assertions));
