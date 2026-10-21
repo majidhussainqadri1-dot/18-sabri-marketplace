@@ -78,17 +78,37 @@ final class MKT_Privacy {
         $removed = false;
         $messages = [];
 
+        // Legal-hold verification is a precondition for ANY destructive
+        // privacy operation, including seller projection and bookmark edits.
+        // An absent/migrating table is not evidence that there are no holds.
+        if (!class_exists('MKT_Governance') || !MKT_Governance::hold_guard_available()) {
+            return [
+                'items_removed' => false,
+                'items_retained' => true,
+                'messages' => [__('Marketplace privacy erasure is paused because legal retention-hold records cannot be verified. Request administrator schema repair.', 'marketplace')],
+                'done' => false,
+            ];
+        }
+
         if ($page === 1) {
             $seller = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('sellers') . ' WHERE user_id=%d', $user_id), ARRAY_A);
             if ($seller) {
-                $wpdb->update(MKT_DB::table('sellers'), [
+                $seller_changed = $wpdb->update(MKT_DB::table('sellers'), [
                     'store_name' => 'Deleted seller', 'public_contact_modes' => '[]', 'country' => '', 'region' => '', 'city' => '',
                     'eligibility_snapshot' => '{}', 'updated_at' => MKT_DB::now(),
                 ], ['id' => (int) $seller['id']]);
-                $removed = true;
+                if ($seller_changed === false) {
+                    return ['items_removed' => false, 'items_retained' => true,
+                        'messages' => [__('Marketplace seller privacy erasure did not complete because the database write failed.', 'marketplace')], 'done' => false];
+                }
+                if ($seller_changed > 0) $removed = true;
             }
             $deleted_saves = $wpdb->delete(MKT_DB::table('saves'), ['user_id' => $user_id]);
-            if ($deleted_saves) $removed = true;
+            if ($deleted_saves === false) {
+                return ['items_removed' => $removed, 'items_retained' => true,
+                    'messages' => [__('Marketplace saved-listing erasure could not be confirmed.', 'marketplace')], 'done' => false];
+            }
+            if ($deleted_saves > 0) $removed = true;
         }
 
         $reports = $wpdb->get_results($wpdb->prepare(
