@@ -28,10 +28,22 @@ final class MKT_Integrations {
 final class FakeDB {
  public array $row = [];
  public array $changes = [];
+ public array $where_clauses = [];
+ public bool $simulate_stolen_lease = false;
  public function get_results($sql,$type){return [$this->row];}
  public function prepare($sql,...$args){return vsprintf(str_replace(['%d','%s'],['%d',"'%s'"],$sql),$args);}
  public function query($sql){return 1;}
- public function update($table,$changes,$where){$this->changes[]=$changes;$this->row['status']=$changes['status'];return 1;}
+ public function update($table,$changes,$where){
+  $this->changes[]=$changes;$this->where_clauses[]=$where;
+  if ($this->simulate_stolen_lease) {
+    // Another worker recovered the old claim; the first worker's final
+    // UPDATE must have its affected-row count fenced to zero.
+    $this->row['status']='processing';
+    $this->row['available_at']='2099-01-01 00:00:00';
+    return 0;
+  }
+  $this->row['status']=$changes['status'];return 1;
+ }
 }
 $wpdb=new FakeDB();
 require dirname(__DIR__).'/includes/class-mkt-events.php';
@@ -42,7 +54,7 @@ function scenario(bool $platform,bool $notify,array $targets,int $actor,int $att
  MKT_Integrations::$recipients=[];
  $event=['event_id'=>'evt-01','event_type'=>'MarketplaceOfferCreated.v1','aggregate'=>['public_id'=>'test'],'actor_user_id'=>$actor,'payload'=>['notify_user_ids'=>$targets,'safe_summary'=>'Offer updated']];
  $wpdb->row=['id'=>1,'attempts'=>$attempts,'status'=>'pending','payload_json'=>json_encode($event)];
- $wpdb->changes=[];
+ $wpdb->changes=[];$wpdb->where_clauses=[];
  MKT_Events::process_outbox();
  return $wpdb->row['status'];
 }
@@ -55,4 +67,9 @@ assert_same('dead',scenario(true,false,[23],7,7),'At retry limit, missing notifi
 assert_same('processed',scenario(true,false,[7],7),'Originating actor does not require self-notification.');
 assert_same([],MKT_Integrations::$recipients,'No unnecessary actor notification was attempted.');
 assert_same('processed',scenario(true,false,[],7),'Events without recipients may finish when a domain consumer acknowledges.');
+assert_true(isset($wpdb->where_clauses[0]['available_at']), 'The Outbox final ACK is fenced by its exact processing-lease timestamp.');
+$wpdb->simulate_stolen_lease=true;
+assert_same('processing',scenario(true,true,[23],7),'A recovered new worker retains the processing claim when an old worker finalizes.');
+assert_same('2099-01-01 00:00:00',$wpdb->row['available_at'],'Outbox old worker may not overwrite the recovered lease.');
+$wpdb->simulate_stolen_lease=false;
 fwrite(STDOUT, "File18 outbox strict per-recipient handoff acknowledgement regression complete.\n");
