@@ -111,10 +111,15 @@ final class MKT_Privacy {
             if ($deleted_saves > 0) $removed = true;
         }
 
+        $wpdb->last_error = '';
         $reports = $wpdb->get_results($wpdb->prepare(
             'SELECT public_id FROM ' . MKT_DB::table('reports') . ' WHERE reporter_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d',
             $user_id, self::ERASE_BATCH, $offset
         ), ARRAY_A);
+        if (!is_array($reports) || $wpdb->last_error !== '') {
+            return ['items_removed' => $removed, 'items_retained' => true,
+                'messages' => [__('Marketplace report erasure cannot be verified while its database query fails.', 'marketplace')], 'done' => false];
+        }
         foreach ($reports as $report) {
             $public_id = (string) $report['public_id'];
             if (class_exists('MKT_Governance') && MKT_Governance::has_active_hold('report', $public_id)) {
@@ -132,10 +137,15 @@ final class MKT_Privacy {
             if ($changed > 0) $removed = true;
         }
 
+        $wpdb->last_error = '';
         $disputes = $wpdb->get_results($wpdb->prepare(
             'SELECT x.public_id FROM ' . MKT_DB::table('disputes') . ' x INNER JOIN ' . MKT_DB::table('deals') . ' d ON d.id=x.deal_id WHERE d.buyer_user_id=%d OR d.seller_user_id=%d OR x.opened_by=%d ORDER BY x.id ASC LIMIT %d OFFSET %d',
             $user_id, $user_id, $user_id, self::ERASE_BATCH, $offset
         ), ARRAY_A);
+        if (!is_array($disputes) || $wpdb->last_error !== '') {
+            return ['items_removed' => $removed, 'items_retained' => true,
+                'messages' => [__('Marketplace dispute erasure cannot be verified while its database query fails.', 'marketplace')], 'done' => false];
+        }
         foreach ($disputes as $dispute) {
             $public_id = (string) $dispute['public_id'];
             if (class_exists('MKT_Governance') && MKT_Governance::has_active_hold('dispute', $public_id)) {
@@ -155,8 +165,17 @@ final class MKT_Privacy {
             if ($changed > 0) $removed = true;
         }
 
-        $offers = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('offers') . ' WHERE buyer_user_id=%d OR seller_user_id=%d', $user_id, $user_id));
-        $deals = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('deals') . ' WHERE buyer_user_id=%d OR seller_user_id=%d', $user_id, $user_id));
+        $wpdb->last_error = '';
+        $offers_raw = $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('offers') . ' WHERE buyer_user_id=%d OR seller_user_id=%d', $user_id, $user_id));
+        $offers_error = $wpdb->last_error !== '' || $offers_raw === null;
+        $wpdb->last_error = '';
+        $deals_raw = $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('deals') . ' WHERE buyer_user_id=%d OR seller_user_id=%d', $user_id, $user_id));
+        if ($offers_error || $wpdb->last_error !== '' || $deals_raw === null) {
+            return ['items_removed' => $removed, 'items_retained' => true,
+                'messages' => [__('Marketplace retained transaction records could not be reconciled; the erasure remains pending.', 'marketplace')], 'done' => false];
+        }
+        $offers = (int) $offers_raw;
+        $deals = (int) $deals_raw;
         if ($offers || $deals || $disputes) {
             $retained = true;
             $messages[] = __('Structured offer, deal and dispute lifecycle records—including participant account IDs where legally or operationally required—are retained under the marketplace transaction/dispute policy. Narrative report/dispute evidence is minimized in bounded batches when no active legal or safety hold requires preservation.', 'marketplace');
