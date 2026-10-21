@@ -125,10 +125,19 @@ final class MKT_Admin {
         $version = (int) wp_unslash((string) ($_POST['version'] ?? 0));
         $reason = sanitize_key(wp_unslash((string) ($_POST['decision_code'] ?? '')));
         $note = wp_kses_post(wp_unslash((string) ($_POST['decision_note'] ?? '')));
-        $result = new WP_Error('mkt_invalid_admin_action', __('Invalid moderation action.', 'marketplace'));
-        if ($type === 'listing') $result = MKT_Listings::transition($public_id, $to, get_current_user_id(), $version, $reason, $note);
-        if ($type === 'report') $result = MKT_Moderation::transition_report($public_id, $to, ['decision_code' => $reason, 'decision_note' => $note], get_current_user_id(), $version);
-        if ($type === 'dispute') $result = MKT_Moderation::transition_dispute($public_id, $to, ['decision_code' => $reason, 'decision_note' => $note], get_current_user_id(), $version);
+        // wp-admin actions must share the same transactional audit/event boundary
+        // as native REST mutations. A status write with failed audit must roll back.
+        try {
+            $result = MKT_DB::transaction(static function() use ($type, $public_id, $to, $version, $reason, $note) {
+                $actor = get_current_user_id();
+                if ($type === 'listing') return MKT_Listings::transition($public_id, $to, $actor, $version, $reason, $note);
+                if ($type === 'report') return MKT_Moderation::transition_report($public_id, $to, ['decision_code'=>$reason,'decision_note'=>$note], $actor, $version);
+                if ($type === 'dispute') return MKT_Moderation::transition_dispute($public_id, $to, ['decision_code'=>$reason,'decision_note'=>$note], $actor, $version);
+                return new WP_Error('mkt_invalid_admin_action', __('Invalid moderation action.', 'marketplace'), ['status'=>422]);
+            });
+        } catch (Throwable $e) {
+            $result = new WP_Error('mkt_moderation_atomic_failed', __('Moderation could not be committed and audited safely.', 'marketplace'), ['status'=>503]);
+        }
         $url = add_query_arg(is_wp_error($result) ? ['mkt_error' => rawurlencode($result->get_error_message())] : ['mkt_updated' => 1], admin_url('admin.php?page=mkt-marketplace-moderation'));
         wp_safe_redirect($url);
         exit;
