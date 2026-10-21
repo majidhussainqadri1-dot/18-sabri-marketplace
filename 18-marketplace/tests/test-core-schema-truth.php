@@ -1,12 +1,14 @@
 <?php
 /** Core File18 schema vs wp_options truth, with real MKT_DB::schema_ready/maybe_upgrade methods. */
 require __DIR__.'/bootstrap.php';
+defined('ARRAY_A')||define('ARRAY_A','ARRAY_A');
 class CoreSchemaFakeDB {
  public string $prefix='wp_';
  public string $last_error='';
  public bool $missing_table=false;
  public bool $missing_column=false;
  public bool $bad_inventory=false;
+ public bool $bad_unique=false;
  public int $upgrade_locks=0;
  public function esc_like(string $text):string{return str_replace(['_','%'],['\\_','\\%'],$text);}
  public function prepare(string $q,...$args):string{return vsprintf(str_replace(['%s','%d'],["'%s'",'%d'],$q),$args);}
@@ -34,6 +36,24 @@ class CoreSchemaFakeDB {
    }
   }
   return [];
+ }
+ public function get_results(string $sql,$type):array {
+  $table='';
+  foreach(['sellers','listings','offers','deals','outbox','inbox','idempotency','migration_handoffs'] as $name)
+    if(str_contains($sql,'wp_mkt_'.$name)){$table=$name;break;}
+  $keys=[
+   'sellers'=>['user_id'=>['user_id']], 'listings'=>['public_id'=>['public_id']],
+   'offers'=>['idempotency_key'=>['idempotency_key']], 'deals'=>['accepted_offer_id'=>['accepted_offer_id']],
+   'outbox'=>['event_id'=>['event_id']], 'inbox'=>['source_event'=>['source','event_id']],
+   'idempotency'=>['actor_scope_key'=>['actor_user_id','scope','idempotency_key']],
+   'migration_handoffs'=>['legacy_record'=>['legacy_type','legacy_id']]
+  ];
+  $rows=[['Key_name'=>'PRIMARY','Non_unique'=>0,'Seq_in_index'=>1,'Column_name'=>'id']];
+  foreach($keys[$table]??[] as $key=>$parts)foreach($parts as $i=>$col){
+   if($this->bad_unique && $table==='sellers' && $key==='user_id')$col='other_user_id';
+   $rows[]=['Key_name'=>$key,'Non_unique'=>0,'Seq_in_index'=>$i+1,'Column_name'=>$col];
+  }
+  return $rows;
  }
  public function get_var(string $sql):int {
   if(str_contains($sql,'GET_LOCK')){$this->upgrade_locks++;return 0;} // simulates concurrent updater: no schema writes
@@ -64,6 +84,9 @@ assert_same(false,MKT_DB::schema_ready(),'Version-critical missing listing colum
 MKT_DB::maybe_upgrade();
 assert_same(2,$wpdb->upgrade_locks,'Current version with bad real columns must not silently skip repair.');
 $wpdb->missing_column=false;
+$wpdb->bad_unique=true;
+assert_same(false,MKT_DB::schema_ready(),'Missing/wrong UNIQUE key is not disguised by correct table and column inventory.');
+$wpdb->bad_unique=false;
 $wpdb->bad_inventory=true;
 assert_same(false,MKT_DB::schema_ready(),'Invalid table-inventory query never verifies schema.');
 $wpdb->bad_inventory=false;
