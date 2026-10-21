@@ -156,7 +156,7 @@ final class MKT_Admin {
             wp_safe_redirect(add_query_arg(['mkt_error' => rawurlencode(__('Invalid policy data.', 'marketplace'))], admin_url('admin.php?page=mkt-marketplace-policies')));
             exit;
         }
-        if ($type === 'business' && $key === 'zero_commission' && ((float) ($rules['commission_percent'] ?? 0) !== 0.0 || !empty($rules['donation_advantage']))) {
+        if ($type === 'business' && $key === 'zero_commission' && !MKT_Policy::valid_zero_commission_policy($rules)) {
             wp_safe_redirect(add_query_arg(['mkt_error' => rawurlencode(__('The zero-commission and no-donor-advantage laws cannot be overridden.', 'marketplace'))], admin_url('admin.php?page=mkt-marketplace-policies')));
             exit;
         }
