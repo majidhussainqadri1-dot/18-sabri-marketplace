@@ -4,7 +4,7 @@ require __DIR__.'/bootstrap.php';
 function sanitize_text_field($text):string{return strip_tags((string)$text);}
 function is_user_logged_in():bool{return true;}
 function get_current_user_id():int{return 41;}
-function current_user_can(string $cap):bool{return true;}
+function current_user_can(string $cap):bool{return false;} // Prove scoped File00 rights work without synthetic WordPress mkt_* grants.
 class SMC_Contracts {
  public static array $payload=[];
  public static bool $fail=false;
