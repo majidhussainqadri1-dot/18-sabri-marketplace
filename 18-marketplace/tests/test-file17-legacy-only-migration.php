@@ -2,6 +2,7 @@
 /** Regression: old File17 conversation/message rows must be inventoried without legacy sellers/products. */
 require __DIR__.'/bootstrap.php';
 defined('MKT_SCHEMA_VERSION')||define('MKT_SCHEMA_VERSION','2.1.0');
+function current_time($format,$gmt=false):string{return gmdate('Y-m-d H:i:s');}
 class LegacyOnlyFakeDB {
  public string $prefix='wp_';
  public array $tables=['wp_smp_conversations'=>true, 'wp_smp_messages'=>true];
