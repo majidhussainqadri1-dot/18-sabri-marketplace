@@ -68,7 +68,7 @@ final class MKT_Governance {
     }
 
     private static function install_schema(): void {
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        if (!function_exists('dbDelta')) require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         global $wpdb;
         $c = $wpdb->get_charset_collate();
         $evidence = self::table('listing_evidence');
@@ -742,6 +742,7 @@ final class MKT_Governance {
     public static function hold_guard_available(): bool {
         if (!self::table_exists('retention_holds')) return false;
         global $wpdb;
+        $wpdb->last_error = '';
         $columns = $wpdb->get_col('SHOW COLUMNS FROM ' . self::table('retention_holds'), 0);
         return is_array($columns) && !array_diff(['object_type','object_public_id','status','expires_at'], $columns)
             && $wpdb->last_error === '';
