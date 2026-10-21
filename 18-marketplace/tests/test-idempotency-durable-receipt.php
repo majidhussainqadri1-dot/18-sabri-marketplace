@@ -10,10 +10,12 @@ class MKT_DB {public static function table($n){return 'wp_mkt_'.$n;}public stati
 class FakeIdempotencyDB {
  public int|false $receipt_result=1;
  public array $updates=[];
+ public bool $already_exists=false;
+ public ?array $existing=null;
  public function prepare($sql,...$args):string {return vsprintf(str_replace(['%s','%d'],["'%s'",'%d'],$sql),$args);}
- public function query($sql){return 1;}
+ public function query($sql){return $this->already_exists&&str_starts_with($sql,'INSERT IGNORE')?0:1;}
  public function update($table,$data,$where) {$this->updates[]=['data'=>$data,'where'=>$where];return $this->receipt_result;}
- public function get_row($query,$type){return null;}
+ public function get_row($query,$type){return $this->existing;}
 }
 $wpdb=new FakeIdempotencyDB();
 require dirname(__DIR__).'/includes/class-mkt-idempotency.php';
@@ -31,4 +33,22 @@ $success=MKT_Idempotency::run('listing_create','valid-object-abcdef0123',['title
 assert_same(['public_id'=>'ok'],$success,'Normal successful durable receipt preserves command result.');
 $error=MKT_Idempotency::run('listing_create','failed-object-abcdef0123',['title'=>'Bad'],static fn()=>new WP_Error('mkt_invalid'));
 assert_same('mkt_invalid',$error->get_error_code(),'Normal durable failure preserves domain error.');
+$wpdb->already_exists=true;
+$hash=hash('sha256',json_encode(['title'=>'Book']));
+$wpdb->existing=['id'=>71,'request_hash'=>$hash,'status'=>'completed','response_json'=>'{malformed'];
+$called=0;
+$bad=MKT_Idempotency::run('listing_create','cached-invalid-abcdef123',['title'=>'Book'],static function() use (&$called){$called++;return true;});
+assert_same('mkt_idempotency_receipt_corrupt',$bad->get_error_code(),'Malformed completed receipt never silently turns into success.');
+assert_same(0,$called,'Malformed cached receipt does not invoke owner mutation.');
+$wpdb->existing['response_json']='{"public_id":"book-safe"}';
+$ok=MKT_Idempotency::run('listing_create','cached-valid-abcdef123',['title'=>'Book'],static function()use(&$called){$called++;return false;});
+assert_same(['public_id'=>'book-safe'],$ok,'Valid completed receipt is returned without replay.');
+assert_same(0,$called,'Valid cached receipt never invokes owner mutation.');
+$wpdb->existing=['id'=>71,'request_hash'=>$hash,'status'=>'processing','expires_at'=>'2020-01-01 00:00:00'];
+$wpdb->updates=[];
+$uncertain=MKT_Idempotency::run('listing_create','old-reservation-abcdef123',['title'=>'Book'],static function()use(&$called){$called++;return true;});
+assert_same('mkt_idempotency_outcome_uncertain',$uncertain->get_error_code(),'Expired uncertain mutation blocks unsafe blind replay.');
+assert_same(0,$called,'Uncertain stale reservation cannot execute the mutation again.');
+assert_same([],$wpdb->updates,'No completion or failure receipt is forged for an uncertain prior result.');
+$wpdb->already_exists=false;
 fwrite(STDOUT,"File18 durable idempotency acknowledgment negative regression complete.\n");
