@@ -94,7 +94,12 @@ final class MKT_Integrations {
                     'file00_marketplace_scope_verified' => $scope_known,
                     'file00_marketplace_seller_allowed' => $scope_known && self::identity_true($commerce['marketplace_seller_actions_allowed']),
                     'file00_marketplace_deal_allowed' => $scope_known && self::identity_true($commerce['marketplace_direct_deal_allowed']),
-                    'capabilities' => [],
+                    // These are owner-signed domain permissions, not invented
+                    // marketplace powers or broad WordPress role grants.
+                    'capabilities' => array_merge(
+                        $scope_known && self::identity_true($commerce['marketplace_seller_actions_allowed']) ? ['mkt_sell'] : [],
+                        $scope_known && self::identity_true($commerce['marketplace_direct_deal_allowed']) ? ['mkt_buy'] : []
+                    ),
                     'roles' => [],
                     'version' => sanitize_text_field((string) ($source['contract_version'] ?? '')),
                     'contract_mode' => 'file00_smc_contract',
