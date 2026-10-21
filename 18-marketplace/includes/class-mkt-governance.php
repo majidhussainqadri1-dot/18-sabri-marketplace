@@ -679,7 +679,11 @@ final class MKT_Governance {
             return new WP_Error('mkt_hold_invalid', __('A documented, time-bounded retention hold with authority reference is required.', 'marketplace'), ['status' => 422]);
         }
         global $wpdb;
+        $wpdb->last_error = '';
         $existing = $wpdb->get_var($wpdb->prepare("SELECT public_id FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP() LIMIT 1", $object_type, $object_public_id));
+        if ($wpdb->last_error !== '') {
+            return new WP_Error('mkt_hold_lookup_unavailable', __('Existing legal holds could not be checked safely.', 'marketplace'), ['status' => 503]);
+        }
         if ($existing) return new WP_Error('mkt_hold_exists', __('An active retention hold already exists for this object.', 'marketplace'), ['status' => 409, 'public_id' => (string) $existing]);
         $public_id = MKT_DB::uuid();
         try {
@@ -693,10 +697,14 @@ final class MKT_Governance {
                     return new WP_Error('mkt_hold_lock_unavailable', __('Another retention-hold change is in progress.', 'marketplace'), ['status' => 503]);
                 }
                 MKT_DB::release_named_lock_after_transaction($hold_lock);
+                $wpdb->last_error = '';
                 $current = $wpdb->get_var($wpdb->prepare(
                     "SELECT public_id FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP() LIMIT 1",
                     $object_type, $object_public_id
                 ));
+                if ($wpdb->last_error !== '') {
+                    return new WP_Error('mkt_hold_lookup_unavailable', __('Existing legal holds could not be rechecked under the object lock.', 'marketplace'), ['status' => 503]);
+                }
                 if ($current) {
                     return new WP_Error('mkt_hold_exists', __('An active retention hold already exists for this object.', 'marketplace'), ['status' => 409, 'public_id' => (string) $current]);
                 }
@@ -727,7 +735,11 @@ final class MKT_Governance {
         $auth = self::retention_authorization('release_retention_hold');
         if (is_wp_error($auth)) return $auth;
         global $wpdb;
+        $wpdb->last_error = '';
         $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . self::table('retention_holds') . ' WHERE public_id=%s', $public_id), ARRAY_A);
+        if ($wpdb->last_error !== '') {
+            return new WP_Error('mkt_hold_lookup_unavailable', __('The legal-hold record could not be read safely.', 'marketplace'), ['status' => 503]);
+        }
         if (!$row) return new WP_Error('mkt_hold_not_found', __('Retention hold not found.', 'marketplace'), ['status' => 404]);
         if ((string) $row['status'] !== 'active') return ['public_id' => $public_id, 'status' => (string) $row['status']];
         $reason = mb_substr(sanitize_text_field((string) ($input['reason'] ?? '')), 0, 190);

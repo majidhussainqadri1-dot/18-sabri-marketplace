@@ -37,17 +37,20 @@ final class MKT_Privacy {
         $done = true;
 
         if ($page === 1) {
+            $wpdb->last_error = '';
             $seller = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('sellers') . ' WHERE user_id=%d', $user_id), ARRAY_A);
+            if ($wpdb->last_error !== '') return self::export_unavailable();
             if ($seller) $data[] = self::group('seller', $seller['public_id'], $seller, ['eligibility_snapshot']);
         }
 
         $sets = [
-            'listing' => $wpdb->get_results($wpdb->prepare('SELECT l.* FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE s.user_id=%d ORDER BY l.id ASC LIMIT %d OFFSET %d', $user_id, self::EXPORT_BATCH, $offset), ARRAY_A),
-            'offer' => $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE buyer_user_id=%d OR seller_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d', $user_id, $user_id, self::EXPORT_BATCH, $offset), ARRAY_A),
-            'deal' => $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE buyer_user_id=%d OR seller_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d', $user_id, $user_id, self::EXPORT_BATCH, $offset), ARRAY_A),
-            'report' => $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE reporter_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d', $user_id, self::EXPORT_BATCH, $offset), ARRAY_A),
-            'dispute' => $wpdb->get_results($wpdb->prepare('SELECT x.* FROM ' . MKT_DB::table('disputes') . ' x INNER JOIN ' . MKT_DB::table('deals') . ' d ON d.id=x.deal_id WHERE d.buyer_user_id=%d OR d.seller_user_id=%d OR x.opened_by=%d ORDER BY x.id ASC LIMIT %d OFFSET %d', $user_id, $user_id, $user_id, self::EXPORT_BATCH, $offset), ARRAY_A),
+            'listing' => self::verified_export_rows($wpdb->prepare('SELECT l.* FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE s.user_id=%d ORDER BY l.id ASC LIMIT %d OFFSET %d', $user_id, self::EXPORT_BATCH, $offset)),
+            'offer' => self::verified_export_rows($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE buyer_user_id=%d OR seller_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d', $user_id, $user_id, self::EXPORT_BATCH, $offset)),
+            'deal' => self::verified_export_rows($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE buyer_user_id=%d OR seller_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d', $user_id, $user_id, self::EXPORT_BATCH, $offset)),
+            'report' => self::verified_export_rows($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE reporter_user_id=%d ORDER BY id ASC LIMIT %d OFFSET %d', $user_id, self::EXPORT_BATCH, $offset)),
+            'dispute' => self::verified_export_rows($wpdb->prepare('SELECT x.* FROM ' . MKT_DB::table('disputes') . ' x INNER JOIN ' . MKT_DB::table('deals') . ' d ON d.id=x.deal_id WHERE d.buyer_user_id=%d OR d.seller_user_id=%d OR x.opened_by=%d ORDER BY x.id ASC LIMIT %d OFFSET %d', $user_id, $user_id, $user_id, self::EXPORT_BATCH, $offset)),
         ];
+        if (in_array(null, $sets, true)) return self::export_unavailable();
         foreach ($sets as $type => $rows) {
             if (count($rows) === self::EXPORT_BATCH) $done = false;
             foreach ($rows as $row) {
@@ -56,15 +59,32 @@ final class MKT_Privacy {
             }
         }
 
-        if (class_exists('MKT_Governance') && MKT_Governance::table_exists('listing_evidence')) {
-            $rows = $wpdb->get_results($wpdb->prepare(
-                'SELECT e.* FROM ' . MKT_Governance::table('listing_evidence') . ' e INNER JOIN ' . MKT_DB::table('listings') . ' l ON l.public_id=e.listing_public_id INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE s.user_id=%d ORDER BY e.id ASC LIMIT %d OFFSET %d',
-                $user_id, self::EXPORT_BATCH, $offset
-            ), ARRAY_A);
-            if (count($rows) === self::EXPORT_BATCH) $done = false;
-            foreach ($rows as $row) $data[] = self::group('listing-evidence', (string) $row['listing_public_id'], $row, []);
+        // This is required owner evidence, not an optional query whose failure
+        // may silently turn a partial export into a completed privacy request.
+        if (!class_exists('MKT_Governance') || !MKT_Governance::schema_ready()) {
+            return self::export_unavailable();
         }
+        $rows = self::verified_export_rows($wpdb->prepare(
+            'SELECT e.* FROM ' . MKT_Governance::table('listing_evidence') . ' e INNER JOIN ' . MKT_DB::table('listings') . ' l ON l.public_id=e.listing_public_id INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE s.user_id=%d ORDER BY e.id ASC LIMIT %d OFFSET %d',
+            $user_id, self::EXPORT_BATCH, $offset
+        ));
+        if ($rows === null) return self::export_unavailable();
+        if (count($rows) === self::EXPORT_BATCH) $done = false;
+        foreach ($rows as $row) $data[] = self::group('listing-evidence', (string) $row['listing_public_id'], $row, []);
         return ['data' => $data, 'done' => $done];
+    }
+
+    private static function verified_export_rows(string $sql): ?array {
+        global $wpdb;
+        $wpdb->last_error = '';
+        $rows = $wpdb->get_results($sql, ARRAY_A);
+        return is_array($rows) && $wpdb->last_error === '' ? $rows : null;
+    }
+
+    private static function export_unavailable(): array {
+        // WordPress privacy exporters expect an array. Never return a falsely
+        // complete empty bundle if any required owner query is unavailable.
+        return ['data' => [], 'done' => false, 'error' => 'mkt_export_source_unavailable'];
     }
 
     public static function erase(string $email_address, int $page = 1): array {

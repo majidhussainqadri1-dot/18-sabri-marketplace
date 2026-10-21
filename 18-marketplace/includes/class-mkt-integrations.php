@@ -80,7 +80,7 @@ final class MKT_Integrations {
 
         // An identity provider may explicitly declare itself unavailable/degraded.
         // Never overwrite that signal with local optimism.
-        if (array_key_exists('available', $raw) && !$raw['available']) {
+        if (array_key_exists('available', $raw) && !self::identity_true($raw['available'])) {
             $unavailable = array_replace($empty, $raw);
             $unavailable['available'] = false;
             $unavailable['compatible'] = false;
@@ -106,20 +106,36 @@ final class MKT_Integrations {
         if (!in_array($assertions['risk_state'], ['low','normal','medium','elevated','high','critical','blocked','unknown'], true)) {
             $assertions['risk_state'] = 'unknown';
         }
-        $assertions['approved'] = !empty($assertions['approved']) || in_array($assertions['status'], ['approved','verified','active'], true);
-        $assertions['verified'] = !empty($assertions['verified']) || $assertions['status'] === 'verified';
+        // File00 is the authoritative identity owner. An explicit denial of
+        // approval/verification must NEVER be overridden by a coarse status
+        // label (e.g. active account with pending or revoked verification).
+        $assertions['approved'] = array_key_exists('approved', $raw)
+            ? self::identity_true($raw['approved'])
+            : in_array($assertions['status'], ['approved','verified','active'], true);
+        $assertions['verified'] = array_key_exists('verified', $raw)
+            ? self::identity_true($raw['verified'])
+            : $assertions['status'] === 'verified';
         $assertions['suspended'] = !empty($assertions['suspended']) || in_array($assertions['status'], ['suspended','banned','revoked'], true);
-        $assertions['guardian_verified'] = (bool) $assertions['guardian_verified'];
-        if ($assertions['is_minor'] !== null) $assertions['is_minor'] = (bool) $assertions['is_minor'];
+        $assertions['guardian_verified'] = self::identity_true($assertions['guardian_verified']);
+        if ($assertions['is_minor'] !== null) {
+            $parsed_minor = filter_var($assertions['is_minor'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            $assertions['is_minor'] = $parsed_minor; // Unknown, malformed age/guardian classification must not become false.
+        }
         if ($assertions['age'] !== null) $assertions['age'] = max(0, min(130, (int) $assertions['age']));
         $assertions['version'] = sanitize_text_field((string) $assertions['version']);
 
-        $provider_compatible = array_key_exists('compatible', $raw) ? (bool) $raw['compatible'] : true;
+        $provider_compatible = array_key_exists('compatible', $raw) ? self::identity_true($raw['compatible']) : true;
         $provider_compatible = (bool) apply_filters('mkt_identity_contract_compatible', $provider_compatible, $assertions['version'], $raw);
         $assertions['compatible'] = $provider_compatible;
         $assertions['available'] = $provider_compatible;
         $assertions['contract_mode'] = sanitize_key((string) ($assertions['contract_mode'] ?: ($assertions['version'] !== '' ? 'versioned' : 'legacy_compat')));
         return $assertions;
+    }
+
+    private static function identity_true($value): bool {
+        // String "false" is truthy in PHP; never promote a negative File00
+        // identity or guardian assertion from an external profile payload.
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === true;
     }
 
     public static function communication_status(): array {
