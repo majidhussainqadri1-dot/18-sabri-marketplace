@@ -19,39 +19,57 @@ final class MKT_Listings {
             'captured_at' => MKT_DB::now(),
             'identity_version' => $eligibility['assertions']['version'],
         ];
-        if (!$seller) {
-            $user = get_userdata($user_id);
-            $wpdb->insert($table, [
-                'public_id' => MKT_DB::uuid(),
-                'user_id' => $user_id,
-                'store_name' => sanitize_text_field((string) ($user ? $user->display_name : '')),
-                'seller_type' => 'individual',
-                'status' => 'approved',
-                'eligibility_snapshot' => wp_json_encode($snapshot),
-                'public_contact_modes' => wp_json_encode(['file17_chat']),
-                'country' => '',
-                'region' => '',
-                'city' => '',
-                'version' => 1,
-                'created_at' => MKT_DB::now(),
-                'updated_at' => MKT_DB::now(),
-                'approved_at' => MKT_DB::now(),
-            ]);
-            if (!$wpdb->insert_id) {
-                return new WP_Error('mkt_seller_create_failed', __('Seller record could not be created.', 'marketplace'), ['status' => 500]);
-            }
-            $seller = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $wpdb->insert_id), ARRAY_A);
-            MKT_Audit::record('seller_created', 'seller', (string) $seller['public_id'], ['user_id' => $user_id]);
-        } else {
-            $wpdb->update($table, [
-                'status' => 'approved',
-                'eligibility_snapshot' => wp_json_encode($snapshot),
-                'updated_at' => MKT_DB::now(),
-                'version' => (int) $seller['version'] + 1,
-            ], ['id' => (int) $seller['id'], 'version' => (int) $seller['version']]);
-            $seller = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", (int) $seller['id']), ARRAY_A);
+        try {
+            return MKT_DB::transaction(static function() use ($wpdb, $table, $seller, $user_id, $snapshot) {
+                if (!$seller) {
+                    $user = get_userdata($user_id);
+                    $public_id = MKT_DB::uuid();
+                    $inserted = $wpdb->insert($table, [
+                        'public_id' => $public_id,
+                        'user_id' => $user_id,
+                        'store_name' => sanitize_text_field((string) ($user ? $user->display_name : '')),
+                        'seller_type' => 'individual',
+                        'status' => 'approved',
+                        'eligibility_snapshot' => wp_json_encode($snapshot),
+                        'public_contact_modes' => wp_json_encode(['file17_chat']),
+                        'country' => '',
+                        'region' => '',
+                        'city' => '',
+                        'version' => 1,
+                        'created_at' => MKT_DB::now(),
+                        'updated_at' => MKT_DB::now(),
+                        'approved_at' => MKT_DB::now(),
+                    ]);
+                    if ($inserted !== 1 || (int) $wpdb->insert_id <= 0) {
+                        return new WP_Error('mkt_seller_create_failed', __('Seller record could not be created.', 'marketplace'), ['status' => 503]);
+                    }
+                    $seller_id = (int) $wpdb->insert_id;
+                    $created = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $seller_id), ARRAY_A);
+                    if (!$created || (int) $created['user_id'] !== $user_id || (string) $created['public_id'] !== $public_id) {
+                        return new WP_Error('mkt_seller_readback_failed', __('The new seller record could not be verified.', 'marketplace'), ['status' => 503]);
+                    }
+                    MKT_Audit::record('seller_created', 'seller', $public_id, ['user_id' => $user_id]);
+                    return $created;
+                }
+                $updated = $wpdb->update($table, [
+                    'status' => 'approved',
+                    'eligibility_snapshot' => wp_json_encode($snapshot),
+                    'updated_at' => MKT_DB::now(),
+                    'version' => (int) $seller['version'] + 1,
+                ], ['id' => (int) $seller['id'], 'version' => (int) $seller['version']]);
+                if ($updated !== 1) {
+                    return new WP_Error('mkt_seller_refresh_conflict', __('Seller eligibility could not be refreshed safely.', 'marketplace'), ['status' => 409]);
+                }
+                $fresh = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", (int) $seller['id']), ARRAY_A);
+                if (!$fresh || (int) $fresh['user_id'] !== $user_id || (string) $fresh['status'] !== 'approved'
+                    || (int) $fresh['version'] !== (int) $seller['version'] + 1) {
+                    return new WP_Error('mkt_seller_readback_failed', __('The refreshed seller record could not be verified.', 'marketplace'), ['status' => 503]);
+                }
+                return $fresh;
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_seller_write_failed', __('Seller eligibility could not be saved safely.', 'marketplace'), ['status' => 503]);
         }
-        return $seller;
     }
 
     public static function create(array $input, int $user_id): array|WP_Error {
