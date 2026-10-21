@@ -23,7 +23,10 @@ final class MKT_Plan_Completion {
   return true;
  }
 }
-final class MKT_DB {public static function table($name):string{return 'wp_mkt_'.$name;}}
+final class MKT_DB {
+ public static function table($name):string{return 'wp_mkt_'.$name;}
+ public static function transaction(callable $callback){return $callback();}
+}
 final class MKT_Governance {public static function recall_publication_guard($id):bool{return false;}}
 final class GateDB {
  public int $writes=0;
