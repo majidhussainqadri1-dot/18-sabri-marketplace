@@ -1,6 +1,7 @@
 <?php
 /** Seller de-eligibility cannot be committed while public active listings remain for SQL pause failure. */
 require __DIR__.'/bootstrap.php';
+defined('ARRAY_A')||define('ARRAY_A','ARRAY_A');
 class SellerCronDB {
  public string $last_error='';
  public bool $fail_pause=false;
