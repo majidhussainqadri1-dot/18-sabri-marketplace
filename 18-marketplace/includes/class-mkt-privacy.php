@@ -122,7 +122,14 @@ final class MKT_Privacy {
                 continue;
             }
             $changed = $wpdb->update(MKT_DB::table('reports'), ['details' => '[Erased by privacy request]', 'evidence_refs' => '[]'], ['public_id' => $public_id, 'reporter_user_id' => $user_id]);
-            if ($changed !== false) $removed = true;
+            if ($changed === false) {
+                return [
+                    'items_removed' => $removed, 'items_retained' => true,
+                    'messages' => [__('Marketplace privacy evidence minimization failed; retry after database repair.', 'marketplace')],
+                    'done' => false,
+                ];
+            }
+            if ($changed > 0) $removed = true;
         }
 
         $disputes = $wpdb->get_results($wpdb->prepare(
@@ -138,7 +145,14 @@ final class MKT_Privacy {
             $changed = $wpdb->update(MKT_DB::table('disputes'), [
                 'statement' => '[Erased by privacy request]', 'evidence_refs' => '[]', 'access_grants' => '[]',
             ], ['public_id' => $public_id]);
-            if ($changed !== false) $removed = true;
+            if ($changed === false) {
+                return [
+                    'items_removed' => $removed, 'items_retained' => true,
+                    'messages' => [__('Marketplace privacy evidence minimization failed; retry after database repair.', 'marketplace')],
+                    'done' => false,
+                ];
+            }
+            if ($changed > 0) $removed = true;
         }
 
         $offers = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . MKT_DB::table('offers') . ' WHERE buyer_user_id=%d OR seller_user_id=%d', $user_id, $user_id));
