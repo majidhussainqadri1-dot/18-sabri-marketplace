@@ -640,8 +640,22 @@ final class MKT_Governance {
         $public_id = MKT_DB::uuid();
         try {
             return MKT_DB::transaction(static function() use ($wpdb, $public_id, $object_type, $object_public_id, $reason, $authority, $actor_id, $expires) {
-                // The legal hold must never become active without a durable audit.
-                // The unique active-hold race remains subject to MySQL staging tests.
+                // There is no unique partial index for active, unexpired holds:
+                // serialize by canonical object and recheck UNDER the named lock.
+                // Keep the lock through owner COMMIT/ROLLBACK via MKT_DB.
+                $hold_lock = 'mkt_hold_' . substr(hash('sha256', $object_type . ':' . $object_public_id), 0, 48);
+                $acquired = $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, %d)', $hold_lock, 4));
+                if ((string) $acquired !== '1') {
+                    return new WP_Error('mkt_hold_lock_unavailable', __('Another retention-hold change is in progress.', 'marketplace'), ['status' => 503]);
+                }
+                MKT_DB::release_named_lock_after_transaction($hold_lock);
+                $current = $wpdb->get_var($wpdb->prepare(
+                    "SELECT public_id FROM " . self::table('retention_holds') . " WHERE object_type=%s AND object_public_id=%s AND status='active' AND expires_at>UTC_TIMESTAMP() LIMIT 1",
+                    $object_type, $object_public_id
+                ));
+                if ($current) {
+                    return new WP_Error('mkt_hold_exists', __('An active retention hold already exists for this object.', 'marketplace'), ['status' => 409, 'public_id' => (string) $current]);
+                }
                 $inserted = $wpdb->insert(self::table('retention_holds'), [
                     'public_id' => $public_id,
                     'object_type' => $object_type,
