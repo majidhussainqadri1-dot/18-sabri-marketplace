@@ -37,7 +37,7 @@ final class MKT_Finalization {
     public static function search(WP_REST_Request $request): WP_REST_Response {
         $rate = MKT_Rate_Limiter::check('public_search');
         if (is_wp_error($rate)) return self::error_response($rate);
-        return rest_ensure_response(self::search_array([
+        $result = self::search_array([
             'q' => $request->get_param('q'),
             'category' => $request->get_param('category'),
             'country' => $request->get_param('country'),
@@ -52,7 +52,12 @@ final class MKT_Finalization {
             'rights' => $request->get_param('rights'),
             'cursor' => $request->get_param('cursor'),
             'limit' => $request->get_param('limit'),
-        ]));
+        ]);
+        // A database outage is not a successful empty public result.
+        if (($result['error'] ?? '') === 'search_unavailable') {
+            return new WP_REST_Response($result, 503);
+        }
+        return rest_ensure_response($result);
     }
 
     public static function search_array(array $filters): array {
@@ -107,10 +112,14 @@ final class MKT_Finalization {
             array_push($params, $like, $like, $like, $like);
         }
         if ($cursor > 0) {
+            $wpdb->last_error = '';
             $anchor = $wpdb->get_row($wpdb->prepare(
                 'SELECT published_at FROM ' . MKT_DB::table('listings') . ' WHERE id=%d',
                 $cursor
             ), ARRAY_A);
+            if ($wpdb->last_error !== '') {
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+            }
             if (!$anchor || empty($anchor['published_at'])) {
                 return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'cursor_expired'];
             }
@@ -120,7 +129,11 @@ final class MKT_Finalization {
 
         $sql = 'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes,COALESCE(f.language,\'und\') AS marketplace_language FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id LEFT JOIN ' . MKT_Plan_Completion::table() . ' f ON f.listing_id=l.id WHERE ' . implode(' AND ', array_values(array_unique($where))) . ' ORDER BY l.published_at DESC,l.id DESC LIMIT %d';
         $params[] = $limit + 1;
+        $wpdb->last_error = '';
         $rows = $wpdb->get_results($wpdb->prepare($sql, $params), ARRAY_A);
+        if (!is_array($rows) || $wpdb->last_error !== '') {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+        }
         $has_more = count($rows) > $limit;
         if ($has_more) array_pop($rows);
         $items = [];

@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$(dirname "$ROOT")"
 OUT="${1:-$PROJECT/release}"
 VERSION="2.1.0"
-PACKAGE="18-marketplace-${VERSION}-RC12.zip"
+PACKAGE="18-marketplace-${VERSION}-RC13.zip"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1786089600}"
 export SOURCE_DATE_EPOCH
 mkdir -p "$OUT"

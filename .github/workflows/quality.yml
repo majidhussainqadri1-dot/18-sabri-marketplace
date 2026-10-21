@@ -117,6 +117,10 @@ jobs:
         run: php 18-marketplace/tests/test-privacy-export-completeness.php
       - name: File00 explicit verified/approved denial precedence
         run: php 18-marketplace/tests/test-file00-explicit-identity-denial.php
+      - name: Source search and media safety fail-closed SQL regressions
+        run: php 18-marketplace/tests/test-search-media-sql-failure.php
+      - name: Conditional CF06 localization source owner boundary
+        run: php 18-marketplace/tests/test-cf06-conditional-boundary.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
@@ -139,16 +143,16 @@ jobs:
           set -euo pipefail
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-a"
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
-          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC12.zip"
-          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC12.zip"
+          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC13.zip"
+          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC13.zip"
           cmp "$A" "$B"
           unzip -t "$A"
           HASH_A="$(sha256sum "$A" | awk '{print $1}')"
           HASH_B="$(sha256sum "$B" | awk '{print $1}')"
           test "$HASH_A" = "$HASH_B"
-          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC12.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC12.zip.sha256"
+          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC13.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC13.zip.sha256"
           {
-            echo '### File 18 Marketplace 2.1.0 RC12'
+            echo '### File 18 Marketplace 2.1.0 RC13'
             echo
             echo "SHA-256: \`$HASH_A\`"
             echo
@@ -157,9 +161,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.php == '8.3'
         with:
-          name: file18-marketplace-2.1.0-rc12
+          name: file18-marketplace-2.1.0-rc13
           path: |
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC12.zip
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC12.zip.sha256
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC13.zip
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC13.zip.sha256
           if-no-files-found: error
           retention-days: 14
