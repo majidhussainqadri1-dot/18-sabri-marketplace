@@ -247,7 +247,7 @@ final class MKT_REST {
     }
 
     public static function dashboard(): WP_REST_Response {
-        return rest_ensure_response(MKT_Commerce::dashboard(get_current_user_id()));
+        return self::respond(MKT_Commerce::dashboard(get_current_user_id()));
     }
 
     public static function system_check(): WP_REST_Response {

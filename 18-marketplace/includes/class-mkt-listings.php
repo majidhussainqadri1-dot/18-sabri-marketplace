@@ -263,6 +263,9 @@ final class MKT_Listings {
             return new WP_Error('mkt_stale_version', __('The listing changed. Reload and try again.', 'marketplace'), ['status' => 409]);
         }
         if ($to === 'active') {
+            if (!self::not_expired($listing['expires_at'] ?? null)) {
+                return new WP_Error('mkt_listing_expired', __('This listing has expired and cannot be republished without a new approved expiry.', 'marketplace'), ['status' => 409]);
+            }
             $policy = MKT_Policy::evaluate_listing($listing, MKT_Auth::assertions((int) $listing['seller_user_id']));
             if (!$policy['valid'] || !self::media_ready((int) $listing['id'], (string) $listing['listing_type'] === 'product')) {
                 return new WP_Error('mkt_listing_not_publishable', __('The listing cannot be published until policy and media checks pass.', 'marketplace'), ['status' => 422, 'errors' => $policy['errors']]);
@@ -474,9 +477,17 @@ final class MKT_Listings {
         return $result;
     }
 
+    /** Canonical UTC deadline guard; an absent or malformed expiry never authorizes commerce. */
+    public static function not_expired(?string $expires_at): bool {
+        if ($expires_at === null || $expires_at === '') return false;
+        $utc = new DateTimeZone('UTC');
+        $deadline = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $expires_at, $utc);
+        return $deadline !== false && $deadline->format('Y-m-d H:i:s') === $expires_at && $deadline->getTimestamp() > time();
+    }
+
     public static function get(string $public_id, bool $include_private = false): ?array {
         global $wpdb;
-        $where = $include_private ? '' : " AND l.status='active' AND s.status='approved'";
+        $where = $include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()";
         $row = $wpdb->get_row($wpdb->prepare(
             'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . " s ON s.id=l.seller_id WHERE l.public_id=%s {$where} LIMIT 1",
             $public_id
@@ -487,7 +498,7 @@ final class MKT_Listings {
     public static function get_by_id(int $id, bool $include_private = false): ?array {
         global $wpdb;
         $row = $wpdb->get_row($wpdb->prepare(
-            'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d' . ($include_private ? '' : " AND l.status='active' AND s.status='approved'") . ' LIMIT 1',
+            'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d' . ($include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()") . ' LIMIT 1',
             $id
         ), ARRAY_A);
         return $row ?: null;
@@ -502,6 +513,7 @@ final class MKT_Listings {
         if (!$private) {
             $where[] = "l.status='active'";
             $where[] = "s.status='approved'";
+            $where[] = 'l.expires_at>UTC_TIMESTAMP()';
         }
         if (!empty($filters['seller_user_id'])) {
             $where[] = 's.user_id=%d'; $params[] = (int) $filters['seller_user_id'];
