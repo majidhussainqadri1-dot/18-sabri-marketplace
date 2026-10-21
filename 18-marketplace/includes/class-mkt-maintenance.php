@@ -56,7 +56,10 @@ final class MKT_Maintenance {
                         'updated_at'=>MKT_DB::now(),'suspended_at'=>$target==='suspended'?MKT_DB::now():null,'version'=>(int)$seller['version']+1,
                     ],['id'=>(int)$seller['id'],'version'=>(int)$seller['version'],'status'=>(string)$seller['status']]);
                     if ($updated!==1) return true;
-                    if ($target==='suspended') $wpdb->query($wpdb->prepare("UPDATE ".MKT_DB::table('listings')." SET status='paused',updated_at=%s,version=version+1 WHERE seller_id=%d AND status='active'",MKT_DB::now(),(int)$seller['id']));
+                    if ($target==='suspended') {
+                        $paused=$wpdb->query($wpdb->prepare("UPDATE ".MKT_DB::table('listings')." SET status='paused',updated_at=%s,version=version+1 WHERE seller_id=%d AND status='active'",MKT_DB::now(),(int)$seller['id']));
+                        if ($paused===false) throw new RuntimeException('Seller listings could not be paused atomically.');
+                    }
                     MKT_Events::enqueue('MarketplaceSellerStatusChanged.v1','seller',(string)$seller['public_id'],['from'=>$seller['status'],'to'=>$target]);
                     return true;
                 });
@@ -99,30 +102,75 @@ final class MKT_Maintenance {
     }
 
     private static function purge_retention(): void {
-        global $wpdb; $settings=MKT_DB::settings();
-        $audit_cutoff=gmdate('Y-m-d H:i:s',time()-(int)$settings['retention_audit_days']*DAY_IN_SECONDS);
+        global $wpdb;
+        $settings=MKT_DB::settings();
         $report_cutoff=gmdate('Y-m-d H:i:s',time()-(int)$settings['retention_reports_days']*DAY_IN_SECONDS);
         $dispute_cutoff=gmdate('Y-m-d H:i:s',time()-(int)$settings['retention_disputes_days']*DAY_IN_SECONDS);
-        $wpdb->query($wpdb->prepare('DELETE FROM '.MKT_DB::table('audit').' WHERE created_at<%s',$audit_cutoff));
+        // NEVER prune individual records from the tamper-evident audit chain:
+        // that requires an approved/checkpointed, verified archive protocol.
+        update_option('mkt_retention_audit_prune_state','verified_checkpoint_required',false);
+        if (!class_exists('MKT_Governance') || !MKT_Governance::hold_guard_available()) {
+            update_option('mkt_retention_last_error','legal_hold_schema_unavailable',false);
+            return; // Never interpret missing legal hold evidence as no holds.
+        }
+        $holds=MKT_Governance::table('retention_holds');
         $report_sql="UPDATE ".MKT_DB::table('reports')." r SET r.details='[Expired by retention policy]',r.evidence_refs='[]',r.decision_note='' WHERE r.updated_at<%s AND r.status='closed'";
         $dispute_sql="UPDATE ".MKT_DB::table('disputes')." d SET d.statement='[Expired by retention policy]',d.evidence_refs='[]',d.decision_note='',d.access_grants='[]' WHERE d.updated_at<%s AND d.status='closed'";
-        if (class_exists('MKT_Governance')&&MKT_Governance::table_exists('retention_holds')) {
-            $holds=MKT_Governance::table('retention_holds');
-            $report_sql.=" AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='report' AND h.object_public_id=r.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
-            $dispute_sql.=" AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='dispute' AND h.object_public_id=d.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
+        $report_sql.=" AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='report' AND h.object_public_id=r.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
+        $dispute_sql.=" AND NOT EXISTS (SELECT 1 FROM {$holds} h WHERE h.object_type='dispute' AND h.object_public_id=d.public_id AND h.status='active' AND h.expires_at>UTC_TIMESTAMP())";
+        try {
+            MKT_DB::transaction(static function() use ($wpdb,$report_sql,$dispute_sql,$report_cutoff,$dispute_cutoff) {
+                $reports=$wpdb->query($wpdb->prepare($report_sql,$report_cutoff));
+                if ($reports===false) throw new RuntimeException('Report retention minimization query failed.');
+                $disputes=$wpdb->query($wpdb->prepare($dispute_sql,$dispute_cutoff));
+                if ($disputes===false) throw new RuntimeException('Dispute retention minimization query failed.');
+                return true;
+            });
+            delete_option('mkt_retention_last_error');
+        } catch (Throwable $e) {
+            update_option('mkt_retention_last_error','retention_minimization_failed',false);
         }
-        $wpdb->query($wpdb->prepare($report_sql,$report_cutoff)); $wpdb->query($wpdb->prepare($dispute_sql,$dispute_cutoff));
+        // Idempotency receipt expiry is separate from immutable audit history.
         $wpdb->query("DELETE FROM ".MKT_DB::table('idempotency')." WHERE expires_at<UTC_TIMESTAMP()");
     }
 
     private static function aggregate_metrics(): void {
-        global $wpdb; $date=gmdate('Y-m-d',time()-DAY_IN_SECONDS);
-        $metrics=[
-            'active_listings'=>(int)$wpdb->get_var("SELECT COUNT(*) FROM ".MKT_DB::table('listings')." WHERE status='active'"),
-            'offers_created'=>(int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('offers').' WHERE DATE(created_at)=%s',$date)),
-            'deals_accepted'=>(int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('deals').' WHERE DATE(created_at)=%s',$date)),
-            'reports_created'=>(int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('reports').' WHERE DATE(created_at)=%s',$date)),
+        global $wpdb;
+        $date=gmdate('Y-m-d',time()-DAY_IN_SECONDS);
+        // Metrics are derivative operational projections, never a second
+        // CF05 analytics owner. A failed COUNT is unknown, not a true zero.
+        $queries=[
+            'active_listings'=>"SELECT COUNT(*) FROM ".MKT_DB::table('listings')." WHERE status='active'",
+            'offers_created'=>$wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('offers').' WHERE DATE(created_at)=%s',$date),
+            'deals_accepted'=>$wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('deals').' WHERE DATE(created_at)=%s',$date),
+            'reports_created'=>$wpdb->prepare('SELECT COUNT(*) FROM '.MKT_DB::table('reports').' WHERE DATE(created_at)=%s',$date),
         ];
-        foreach ($metrics as $key=>$value) $wpdb->replace(MKT_DB::table('metrics_daily'),['metric_date'=>$date,'metric_key'=>$key,'dimension_hash'=>hash('sha256','global'),'value_count'=>$value,'value_sum'=>0,'metadata_json'=>'{}','updated_at'=>MKT_DB::now()]);
+        $metrics=[];
+        foreach ($queries as $key=>$sql) {
+            $wpdb->last_error='';
+            $value=$wpdb->get_var($sql);
+            if ($value===null || $wpdb->last_error!=='' || !is_numeric($value) || (int)$value<0) {
+                update_option('mkt_metrics_last_error','source_count_unavailable',false);
+                return;
+            }
+            $metrics[$key]=(int)$value;
+        }
+        try {
+            MKT_DB::transaction(static function() use ($wpdb,$date,$metrics) {
+                foreach ($metrics as $key=>$value) {
+                    $written=$wpdb->replace(MKT_DB::table('metrics_daily'),[
+                        'metric_date'=>$date,'metric_key'=>$key,'dimension_hash'=>hash('sha256','global'),
+                        'value_count'=>$value,'value_sum'=>0,'metadata_json'=>'{}','updated_at'=>MKT_DB::now()
+                    ]);
+                    if ($written===false || (int)$written<1) {
+                        throw new RuntimeException('Marketplace metric projection failed.');
+                    }
+                }
+                return true;
+            });
+            delete_option('mkt_metrics_last_error');
+        } catch (Throwable $e) {
+            update_option('mkt_metrics_last_error','projection_write_failed',false);
+        }
     }
 }
