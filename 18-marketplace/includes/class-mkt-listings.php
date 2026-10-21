@@ -506,10 +506,14 @@ final class MKT_Listings {
         if ($cursor > 0) {
             // The cursor must follow the same composite ordering as the result set.
             // An id-only comparison skips listings published later with an older id.
+            $wpdb->last_error = '';
             $anchor = $wpdb->get_row($wpdb->prepare(
                 'SELECT published_at FROM ' . MKT_DB::table('listings') . ' WHERE id=%d',
                 $cursor
             ), ARRAY_A);
+            if ($wpdb->last_error !== '') {
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+            }
             if (!$anchor || empty($anchor['published_at'])) {
                 return ['items' => [], 'next_cursor' => null, 'has_more' => false, 'error' => 'cursor_expired'];
             }
@@ -522,7 +526,11 @@ final class MKT_Listings {
         }
         $sql .= ' ORDER BY l.published_at DESC,l.id DESC LIMIT %d';
         $params[] = $limit + 1;
+        $wpdb->last_error = '';
         $rows = $wpdb->get_results($wpdb->prepare($sql, $params), ARRAY_A);
+        if (!is_array($rows) || $wpdb->last_error !== '') {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+        }
         $has_more = count($rows) > $limit;
         if ($has_more) {
             array_pop($rows);
@@ -580,7 +588,11 @@ final class MKT_Listings {
     public static function media(int $listing_id, bool $public_only = true): array {
         global $wpdb;
         $where = $public_only ? " AND status='active' AND rights_status='approved' AND scan_status='clean'" : '';
+        $wpdb->last_error = '';
         $rows = $wpdb->get_results($wpdb->prepare('SELECT public_id,provider,provider_public_id,media_kind,rights_status,scan_status,alt_text,sort_order,metadata_json,status FROM ' . MKT_DB::table('media_refs') . " WHERE listing_id=%d {$where} ORDER BY sort_order ASC,id ASC", $listing_id), ARRAY_A);
+        if (!is_array($rows) || $wpdb->last_error !== '') {
+            throw new RuntimeException('Marketplace media evidence is unavailable.');
+        }
         return array_map(static function(array $row): array {
             $row['metadata'] = json_decode((string) $row['metadata_json'], true) ?: [];
             unset($row['metadata_json']);
@@ -590,10 +602,15 @@ final class MKT_Listings {
 
     private static function media_ready(int $listing_id, bool $require_one = false): bool {
         global $wpdb;
-        $total = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . MKT_DB::table('media_refs') . " WHERE listing_id=%d AND status='active'", $listing_id));
+        $wpdb->last_error = '';
+        $total_raw = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . MKT_DB::table('media_refs') . " WHERE listing_id=%d AND status='active'", $listing_id));
+        if ($total_raw === null || $wpdb->last_error !== '') return false;
+        $total = (int) $total_raw;
         if ($require_one && $total < 1) return false;
-        $unsafe = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . MKT_DB::table('media_refs') . " WHERE listing_id=%d AND status='active' AND (rights_status<>'approved' OR scan_status<>'clean')", $listing_id));
-        return $unsafe === 0;
+        $wpdb->last_error = '';
+        $unsafe_raw = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM " . MKT_DB::table('media_refs') . " WHERE listing_id=%d AND status='active' AND (rights_status<>'approved' OR scan_status<>'clean')", $listing_id));
+        if ($unsafe_raw === null || $wpdb->last_error !== '') return false;
+        return (int) $unsafe_raw === 0;
     }
 
     public static function url(array $listing): string {
