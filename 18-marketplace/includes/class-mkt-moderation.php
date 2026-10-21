@@ -89,6 +89,18 @@ final class MKT_Moderation {
     }
 
     public static function transition_report(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
+        // Object-state changes and their mandatory audit/outbox entries must
+        // never diverge when this native owner is called without a REST wrapper.
+        try {
+            return MKT_DB::transaction(static function() use ($public_id, $to, $input, $actor_id, $expected_version) {
+                return self::transition_report_owner($public_id, $to, $input, $actor_id, $expected_version);
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_report_transition_atomic_failed', __('Report moderation could not be committed and audited safely.', 'marketplace'), ['status'=>503, 'trace_id'=>MKT_Audit::trace_id()]);
+        }
+    }
+
+    private static function transition_report_owner(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
         global $wpdb;
         $row = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE public_id=%s', $public_id), ARRAY_A);
         if (!$row) return new WP_Error('mkt_report_not_found', __('Report not found.', 'marketplace'), ['status' => 404]);
@@ -195,6 +207,18 @@ final class MKT_Moderation {
     }
 
     public static function transition_dispute(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
+        // Object-state changes and their mandatory audit/outbox entries must
+        // never diverge when this native owner is called without a REST wrapper.
+        try {
+            return MKT_DB::transaction(static function() use ($public_id, $to, $input, $actor_id, $expected_version) {
+                return self::transition_dispute_owner($public_id, $to, $input, $actor_id, $expected_version);
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_dispute_transition_atomic_failed', __('Dispute moderation could not be committed and audited safely.', 'marketplace'), ['status'=>503, 'trace_id'=>MKT_Audit::trace_id()]);
+        }
+    }
+
+    private static function transition_dispute_owner(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
         global $wpdb;
         $row = $wpdb->get_row($wpdb->prepare('SELECT d.*,x.buyer_user_id,x.seller_user_id,x.public_id AS deal_public_id FROM ' . MKT_DB::table('disputes') . ' d JOIN ' . MKT_DB::table('deals') . ' x ON x.id=d.deal_id WHERE d.public_id=%s', $public_id), ARRAY_A);
         if (!$row) return new WP_Error('mkt_dispute_not_found', __('Dispute not found.', 'marketplace'), ['status' => 404]);

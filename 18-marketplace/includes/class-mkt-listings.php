@@ -239,6 +239,18 @@ final class MKT_Listings {
     }
 
     public static function transition(string $public_id, string $to, int $actor_id, int $expected_version, string $reason = '', string $note = ''): array|WP_Error {
+        // Native WordPress admin, REST and other File18 owner callers must
+        // share the SAME state + audit + event atomicity guarantee.
+        try {
+            return MKT_DB::transaction(static function() use ($public_id, $to, $actor_id, $expected_version, $reason, $note) {
+                return self::transition_owner($public_id, $to, $actor_id, $expected_version, $reason, $note);
+            });
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_listing_atomic_failed', __('The listing transition could not be committed and audited safely.', 'marketplace'), ['status'=>503, 'trace_id'=>MKT_Audit::trace_id()]);
+        }
+    }
+
+    private static function transition_owner(string $public_id, string $to, int $actor_id, int $expected_version, string $reason, string $note): array|WP_Error {
         $listing = self::get($public_id, true);
         if (!$listing) {
             return new WP_Error('mkt_listing_not_found', __('Listing not found.', 'marketplace'), ['status' => 404]);
