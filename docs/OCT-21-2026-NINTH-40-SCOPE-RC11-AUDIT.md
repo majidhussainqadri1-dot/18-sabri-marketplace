@@ -82,3 +82,6 @@ These are **40 distinct requirements/source-owner checks**, not forty independen
 | Live Verification Status | **NOT PERFORMED** |
 
 **Release disposition: CORRECTIVE SOURCE DRAFT; zero live fixes verified, production acceptance BLOCKED.**
+
+## Supplementary root-cause hardening — exact core UNIQUE indexes
+The same N9-01 schema-integrity finding also includes absence/mismatch of the owner primary and unique constraints despite correct columns. `MKT_DB::schema_ready()` now verifies exact `PRIMARY(id)` and unique key shapes for sellers, listings, offers, deals, outbox, inbox, idempotency and File17 legacy handoff inventory. `test-core-schema-truth.php` injects a malformed unique key. This is one supplementary correction **inside** N9-01, not a fifth independent defect group. Real MySQL/schema index migration still needs staging and backup/rollback proof.
