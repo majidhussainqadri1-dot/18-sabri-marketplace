@@ -3,7 +3,6 @@
 require __DIR__.'/bootstrap.php';
 defined('ARRAY_A')||define('ARRAY_A','ARRAY_A');
 function get_current_user_id():int{return 23;}
-function sanitize_key($v):string{return preg_replace('/[^a-z0-9_]/','',strtolower((string)$v));}
 function wp_kses_post($v):string{return (string)$v;}
 function wp_strip_all_tags($v):string{return strip_tags((string)$v);}
 class MKT_Auth {public static function can($cap,$context=[]):bool{return true;}}
