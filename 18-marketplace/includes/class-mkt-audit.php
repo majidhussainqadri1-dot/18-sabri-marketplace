@@ -22,7 +22,24 @@ final class MKT_Audit {
             MKT_DB::release_named_lock_after_transaction($lock_name);
         }
         try {
-            $previous = (string) $wpdb->get_var("SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1");
+            // Verify the predecessor read before extending the immutable chain.
+            // SQL NULL on the first audit record is legitimate only when an
+            // independently checked COUNT proves that this owner table is empty.
+            $wpdb->last_error = '';
+            $previous_result = $wpdb->get_var("SELECT entry_hash FROM {$table} ORDER BY id DESC LIMIT 1");
+            if ($wpdb->last_error !== '') {
+                throw new RuntimeException('Marketplace audit chain predecessor could not be read.');
+            }
+            if ($previous_result === null) {
+                $wpdb->last_error = '';
+                $audit_count = $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+                if ($wpdb->last_error !== '' || $audit_count === null || !ctype_digit((string) $audit_count) || (int) $audit_count !== 0) {
+                    throw new RuntimeException('Marketplace audit chain genesis could not be verified.');
+                }
+            } elseif (!is_string($previous_result) || $previous_result === '') {
+                throw new RuntimeException('Marketplace audit chain predecessor hash is invalid.');
+            }
+            $previous = (string) ($previous_result ?? '');
             $trace_id = self::trace_id();
             $created_at = MKT_DB::now();
             $actor = get_current_user_id();
@@ -61,8 +78,13 @@ final class MKT_Audit {
     public static function verify_chain(int $limit = 500): array {
         global $wpdb;
         $limit = min(5000, max(1, $limit));
+        $wpdb->last_error = '';
         $rows = $wpdb->get_results('SELECT * FROM ' . MKT_DB::table('audit') . ' ORDER BY id DESC LIMIT ' . $limit, ARRAY_A);
-        $rows = array_reverse(is_array($rows) ? $rows : []);
+        if ($wpdb->last_error !== '' || !is_array($rows)) {
+            // Never manufacture a green audit health result from SQL failure.
+            return ['valid' => false, 'checked' => 0, 'breaks' => 0, 'lock_gaps' => 0, 'error' => 'audit_chain_query_unavailable'];
+        }
+        $rows = array_reverse($rows);
         $breaks = 0; $lock_gaps = 0; $prior_hash = null;
         foreach ($rows as $index => $row) {
             $details = json_decode((string) $row['details_json'], true);
