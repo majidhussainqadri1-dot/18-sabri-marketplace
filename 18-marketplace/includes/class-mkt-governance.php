@@ -519,7 +519,7 @@ final class MKT_Governance {
         return false;
     }
 
-    public static function seller_studio(int $user_id): array {
+    public static function seller_studio(int $user_id): array|WP_Error {
         $identity = self::require_current_actor($user_id);
         if (is_wp_error($identity)) return $identity;
         global $wpdb;
