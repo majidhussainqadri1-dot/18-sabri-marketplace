@@ -62,7 +62,7 @@ class ReviewDB {
   return $row;
  }
  public function get_row(string $sql,$type):?array{
-  if(str_contains($sql,'wp_mkt_deals'))return $this->deal;
+  if(str_contains($sql,'wp_mkt_deals') && !str_contains($sql,'wp_mkt_disputes'))return $this->deal;
   if(str_contains($sql,'wp_mkt_reports')){
    $row=null;
    if(preg_match('/WHERE id=(\d+)/',$sql,$m))$row=$this->reports[(int)$m[1]]??null;
