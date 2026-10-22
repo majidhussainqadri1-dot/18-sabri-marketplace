@@ -48,6 +48,7 @@ class SaveEvidenceDB {
  public array $events=[];
  public array $audits=[];
  public int $writes=0;
+ public bool $readback_fails=false;
  public function __construct(){
   $this->listing=['id'=>8,'seller_id'=>6,'seller_user_id'=>41,'public_id'=>'listing-one',
    'status'=>'draft','version'=>5,'category'=>'homeopathic_medicines'];
@@ -64,6 +65,8 @@ class SaveEvidenceDB {
     $this->reads[]=str_contains($sql,'wp_mkt_listings')?'listing':(str_contains($sql,'wp_mkt_listing_evidence')?'evidence':'unknown');
   }
   if(str_contains($sql,'wp_mkt_listings'))return $this->listing;
+  if($this->readback_fails && $this->writes>0
+     && str_contains($sql,'wp_mkt_listing_evidence') && !str_contains($sql,'FOR UPDATE'))return null;
   if(str_contains($sql,'wp_mkt_listing_evidence'))return $this->evidence;
   return null;
  }
@@ -119,4 +122,14 @@ $invalid=$payload;$invalid['evidence']=[];
 $result=MKT_Governance::save_evidence('listing-one',$invalid,41);
 assert_same('mkt_evidence_invalid',$result->get_error_code(),'Fresh regulated category is validated under listing lock.');
 assert_same(0,$wpdb->writes,'Category safety failure remains read-only.');
+$wpdb=new SaveEvidenceDB();
+$wpdb->readback_fails=true;
+$missing=MKT_Governance::save_evidence('listing-one',$payload,41);
+assert_true(is_wp_error($missing),'Save must fail safely when post-commit-style evidence readback is unavailable.');
+assert_same('mkt_evidence_readback_failed',$missing->get_error_code(),'Readback failure is an explicit rollback trigger.');
+assert_same(5,$wpdb->listing['version'],'Listing version rolled back on missing evidence readback.');
+assert_same(2,$wpdb->evidence['version'],'Evidence version rolled back on missing evidence readback.');
+assert_same('approved',$wpdb->evidence['status'],'Previous review state preserved on readback failure.');
+assert_same([],$wpdb->events,'Outbox messages rolled back if evidence readback is not confirmed.');
+assert_same([],$wpdb->audits,'Audit fact rolled back if evidence command could not finish.');
 fwrite(STDOUT,"RC25 actual governance evidence save lock-order/owner/state/category/version regressions passed.\n");
