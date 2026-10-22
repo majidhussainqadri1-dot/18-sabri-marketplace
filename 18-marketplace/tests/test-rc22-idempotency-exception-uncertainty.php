@@ -16,6 +16,7 @@ class AmbiguousCommitDB {
  public string $status='processing';
  public function prepare(string $sql,...$args):string{return vsprintf(str_replace(['%s','%d'],["'%s'",'%d'],$sql),$args);}
  public function query(string $sql):int {
+  if(str_starts_with($sql,'UPDATE '))return 1; // Verified-failed CAS can be reclaimed.
   if(!$this->reserved){$this->reserved=true;return 1;}
   return 0;
  }
