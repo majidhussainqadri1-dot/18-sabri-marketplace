@@ -1,6 +1,7 @@
 <?php
 /** RC22 real Commerce owner: a reused key must match the full persisted offer command. */
 require __DIR__.'/bootstrap.php';
+function get_current_user_id():int{return (int)($GLOBALS['rc23_actor']??41);}
 defined('ARRAY_A') || define('ARRAY_A','ARRAY_A');
 defined('HOUR_IN_SECONDS') || define('HOUR_IN_SECONDS', 3600);
 function wp_kses_post($x):string{return (string)$x;}
@@ -64,6 +65,7 @@ $wpdb->existing['parent_offer_id']=10;
 $wpdb->existing['public_id']='counter-old';
 $wpdb->existing['created_by']=2;
 $counter=['amount'=>101,'terms'=>'delivery in person','expires_hours'=>48];
+$GLOBALS['rc23_actor']=2;
 $retry=MKT_Commerce::transition_offer('offer-parent','countered',$counter,2,1,$key);
 assert_same('counter-old',$retry['public_id'],'Identical counter-offer replay returns the prior counter receipt.');
 deny(MKT_Commerce::transition_offer('offer-parent','countered',array_merge($counter,['amount'=>105]),2,1,$key),'Changed counter amount');
