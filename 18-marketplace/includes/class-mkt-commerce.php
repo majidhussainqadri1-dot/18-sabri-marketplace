@@ -101,7 +101,17 @@ final class MKT_Commerce {
                 if (!$inserted) {
                     return new WP_Error('mkt_offer_failed', __('The offer could not be created.', 'marketplace'), ['status' => 409]);
                 }
-                $offer = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE id=%d', $wpdb->insert_id), ARRAY_A);
+                // Capture insert_id before downstream audit/outbox INSERTs change it.
+                $new_offer_id = (int) $wpdb->insert_id;
+                $offer = $new_offer_id > 0 ? $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE id=%d', $new_offer_id), ARRAY_A) : null;
+                if (!is_array($offer) || (int) ($offer['id'] ?? 0) !== $new_offer_id
+                    || (string) ($offer['public_id'] ?? '') !== $public_id
+                    || (int) ($offer['buyer_user_id'] ?? 0) !== $buyer_id
+                    || (int) ($offer['listing_id'] ?? 0) !== (int) $fresh_listing['id']
+                    || (string) ($offer['status'] ?? '') !== 'open'
+                    || (int) ($offer['version'] ?? 0) !== 1) {
+                    return new WP_Error('mkt_offer_readback_failed', __('The new offer could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+                }
                 MKT_Audit::record('offer_created', 'offer', $public_id, ['listing_public_id' => $fresh_listing['public_id'], 'amount' => $amount, 'currency' => $currency]);
                 MKT_Events::enqueue('MarketplaceOfferCreated.v1', 'offer', $public_id, [
                     'listing_public_id' => $fresh_listing['public_id'],
@@ -223,7 +233,15 @@ final class MKT_Commerce {
                     if (!$updated_parent) {
                         return new WP_Error('mkt_stale_version', __('The offer changed. Reload and try again.', 'marketplace'), ['status' => 409]);
                     }
-                    $new = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE id=%d', $new_offer_id), ARRAY_A);
+                    $new = $new_offer_id > 0 ? $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE id=%d', $new_offer_id), ARRAY_A) : null;
+                    if (!is_array($new) || (int) ($new['id'] ?? 0) !== $new_offer_id
+                        || (string) ($new['public_id'] ?? '') !== $new_public_id
+                        || (int) ($new['parent_offer_id'] ?? 0) !== (int) $offer['id']
+                        || (int) ($new['created_by'] ?? 0) !== $actor_id
+                        || (string) ($new['status'] ?? '') !== 'open'
+                        || (int) ($new['version'] ?? 0) !== 1) {
+                        return new WP_Error('mkt_counter_readback_failed', __('The new counter-offer could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+                    }
                     MKT_Audit::record('offer_countered', 'offer', $public_id, ['new_offer_public_id' => $new_public_id]);
                     MKT_Events::enqueue('MarketplaceOfferCountered.v1', 'offer', $new_public_id, [
                         'notify_user_ids' => [$actor_id === (int) $offer['buyer_user_id'] ? (int) $offer['seller_user_id'] : (int) $offer['buyer_user_id']],
@@ -273,6 +291,11 @@ final class MKT_Commerce {
                     'url' => $deal && !is_wp_error($deal) ? home_url('/marketplace/deal/' . $deal['public_id'] . '/') : home_url('/marketplace/dashboard/?tab=offers'),
                 ], 'participants');
                 $fresh = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE id=%d', (int) $offer['id']), ARRAY_A);
+                if (!is_array($fresh) || (string) ($fresh['public_id'] ?? '') !== $public_id
+                    || (string) ($fresh['status'] ?? '') !== $to
+                    || (int) ($fresh['version'] ?? 0) !== $expected_version + 1) {
+                    return new WP_Error('mkt_offer_transition_readback_failed', __('The updated offer could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+                }
                 return ['offer' => self::offer_dto($fresh), 'deal' => $deal];
             });
         } catch (Throwable $e) {
@@ -381,7 +404,14 @@ final class MKT_Commerce {
             'url' => home_url('/marketplace/deal/' . $public_id . '/'),
         ], 'participants');
         $committed_deal = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE id=%d', $new_deal_id), ARRAY_A);
-        if (!$committed_deal || (string) $committed_deal['public_id'] !== $public_id) {
+        if (!is_array($committed_deal) || (string) ($committed_deal['public_id'] ?? '') !== $public_id
+            || (int) ($committed_deal['id'] ?? 0) !== $new_deal_id
+            || (int) ($committed_deal['listing_id'] ?? 0) !== (int) $offer['listing_id']
+            || (int) ($committed_deal['accepted_offer_id'] ?? 0) !== (int) $offer['id']
+            || (int) ($committed_deal['buyer_user_id'] ?? 0) !== (int) $offer['buyer_user_id']
+            || (int) ($committed_deal['seller_user_id'] ?? 0) !== (int) $offer['seller_user_id']
+            || (string) ($committed_deal['status'] ?? '') !== 'accepted'
+            || (int) ($committed_deal['version'] ?? 0) !== 1) {
             return new WP_Error('mkt_deal_readback_failed', __('The new deal could not be verified.', 'marketplace'), ['status' => 500]);
         }
         return self::deal_dto($committed_deal);
@@ -501,6 +531,12 @@ final class MKT_Commerce {
             'url' => home_url('/marketplace/deal/' . $public_id . '/'),
         ], 'participants');
         $fresh = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE id=%d', (int) $deal['id']), ARRAY_A);
+        if (!is_array($fresh) || (string) ($fresh['public_id'] ?? '') !== $public_id
+            || (int) ($fresh['id'] ?? 0) !== (int) $deal['id']
+            || (string) ($fresh['status'] ?? '') !== $effective_to
+            || (int) ($fresh['version'] ?? 0) !== $expected_version + 1) {
+            return new WP_Error('mkt_deal_transition_readback_failed', __('The deal update could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+        }
         return self::deal_dto($fresh);
     }
 

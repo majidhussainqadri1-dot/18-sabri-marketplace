@@ -1,5 +1,13 @@
 # File 18 — Marketplace Release Status (20 October 2026)
 
+## RC27 — Twenty-fifth 40-control commerce receipt/atomicity audit (22 October 2026)
+
+- **5 new source defect groups found / 5 source fixes / 0 proven live fixes**. New offer did not verify canonical readback ID/buyer/listing/version/status; counter-offer did not verify child parent/creator/version/status; offer transition returned unchecked final owner DTO; accepted Deal only verified UUID after stock, audit and outbox; Deal transition returned unchecked final DTO. All now require correct final identity/status/version and relevant owner associations, or fail closed with `WP_Error` within the atomic owner transaction.
+- Dedicated actual PHP class negative tests `tests/test-rc27-commerce-final-readback.php`: 5 owner pathways (new offer, new counter, offer transition, Deal creation, Deal transition); positive and missing/wrong status/version/ID/association cases, rollback of offers/deals/listing stock/audit/outbox. Helper-only Deal constructor tested under its real outer Commerce transaction.
+- `docs/OCT-22-2026-TWENTYFIFTH-40-CONTROL-RC27-AUDIT.md` contains 40 source/plan checkpoints (30 File18 FR/NFR + 10 File00/10/17/19/20/24/25/26/CF05/06 boundaries). **57 named aggregate QA stages planned 40× on each of PHP8.1 and PHP8.3.** Last successful exact-head CI and package hash must be confirmed before green release assertions.
+- **Draft PR #29**, candidate `18-marketplace-2.1.0-RC27.zip`, unmerged and undeployed. Blocker #17 Cloudflare HTTP530, no WPVibe registered live WordPress / deployed source/DB/schema/migration/logs; blocker #18 signed immutable audit-chain archive legal hold/retention approvals. MySQL real staging, integrations, 58 central CV, backup/restore/rollback, independent reviews, Founder approval and live parity/retest pending.
+- **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
 ## RC26 — 24th 40-control Report/Dispute owner readback audit (22 October 2026)
 
 - **New source defect groups: 4 / 4 source-corrected / 0 live verified fixes.** Report create final readback checked UUID only, not state/version/reporter; Report status transition returned unverified SQL DTO; new Dispute creation following Deal mutation returned unverified SQL DTO; Dispute status transition returned unverified SQL DTO. All four now require correct persisted identity/version/status (plus deal/actor on creation) or return fail-closed WP_Error **inside** the owner transaction to roll back owner DB, mandatory audit and outbox.
