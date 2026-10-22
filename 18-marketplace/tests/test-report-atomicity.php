@@ -4,6 +4,7 @@
  * Standalone WPDB simulation; not a substitute for WordPress/MySQL staging.
  */
 require __DIR__ . '/bootstrap.php';
+function get_current_user_id():int{return 42;}
 define('ARRAY_A', 'ARRAY_A');
 function sanitize_text_field($value): string { return trim(strip_tags((string) $value)); }
 function wp_is_uuid($value): bool { return (bool) preg_match('/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i', $value); }
