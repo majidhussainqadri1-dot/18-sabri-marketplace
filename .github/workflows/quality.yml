@@ -163,6 +163,8 @@ jobs:
         run: php 18-marketplace/tests/test-rc24-native-evidence-review-safety.php
       - name: RC25 evidence save owner and concurrency guards
         run: php 18-marketplace/tests/test-rc25-evidence-save-locking.php
+      - name: RC25 recall owner final-readback rollback regression
+        run: php 18-marketplace/tests/test-rc25-recall-readback-atomicity.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
