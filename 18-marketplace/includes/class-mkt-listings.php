@@ -554,6 +554,13 @@ final class MKT_Listings {
     }
 
     public static function search(array $filters = [], bool $private = false): array {
+        // Private Listing DTOs expose drafts and seller-only details. A caller
+        // must explicitly scope the query to their own authenticated seller
+        // identity; omitting or spoofing seller_user_id must never list drafts.
+        if ($private && ((int) ($filters['seller_user_id'] ?? 0) <= 0
+            || (int) ($filters['seller_user_id'] ?? 0) !== (int) get_current_user_id())) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'mkt_private_search_forbidden'];
+        }
         global $wpdb;
         $limit = min(50, max(1, (int) ($filters['limit'] ?? 20)));
         $cursor = max(0, (int) ($filters['cursor'] ?? 0));
