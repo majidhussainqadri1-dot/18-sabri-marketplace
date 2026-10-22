@@ -59,7 +59,9 @@ final class MKT_Moderation {
                     'reason_taxonomy' => $reason,
                 ], 'restricted');
                 $report = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE id=%d', $report_id), ARRAY_A);
-                if (!$report || (string) $report['public_id'] !== $public_id) {
+                if (!$report || (string) ($report['public_id'] ?? '') !== $public_id
+                    || (string) ($report['status'] ?? '') !== 'submitted' || (int) ($report['version'] ?? 0) !== 1
+                    || (int) ($report['reporter_user_id'] ?? 0) !== $user_id) {
                     return new WP_Error('mkt_report_readback_failed', __('The submitted report could not be verified.', 'marketplace'), ['status' => 500]);
                 }
                 return self::report_dto($report);
@@ -157,7 +159,13 @@ final class MKT_Moderation {
             'safe_summary' => sprintf(__('Marketplace report status changed to %s.', 'marketplace'), $to),
             'url' => home_url('/marketplace/dashboard/?tab=reports'),
         ], 'restricted');
-        return self::report_dto($wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE id=%d', (int) $row['id']), ARRAY_A));
+        $confirmed = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('reports') . ' WHERE id=%d', (int) $row['id']), ARRAY_A);
+        if (!is_array($confirmed) || (string) ($confirmed['public_id'] ?? '') !== $public_id
+            || (string) ($confirmed['status'] ?? '') !== $to
+            || (int) ($confirmed['version'] ?? 0) !== $expected_version + 1) {
+            return new WP_Error('mkt_report_transition_readback_failed', __('The report decision could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+        }
+        return self::report_dto($confirmed);
     }
 
     public static function open_dispute(string $deal_public_id, array $input, int $user_id): array|WP_Error {
@@ -205,7 +213,15 @@ final class MKT_Moderation {
                     'safe_summary' => __('A deal dispute was opened.', 'marketplace'),
                     'url' => home_url('/marketplace/deal/' . $deal_public_id . '/'),
                 ], 'restricted');
-                return self::dispute_dto($wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('disputes') . ' WHERE public_id=%s', $public_id), ARRAY_A));
+                $confirmed = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('disputes') . ' WHERE public_id=%s', $public_id), ARRAY_A);
+                if (!is_array($confirmed) || (string) ($confirmed['public_id'] ?? '') !== $public_id
+                    || (int) ($confirmed['deal_id'] ?? 0) !== (int) $deal_row['id']
+                    || (int) ($confirmed['opened_by'] ?? 0) !== $user_id
+                    || (int) ($confirmed['version'] ?? 0) !== 1
+                    || (string) ($confirmed['status'] ?? '') !== 'opened') {
+                    return new WP_Error('mkt_dispute_readback_failed', __('The newly opened dispute could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+                }
+                return self::dispute_dto($confirmed);
             });
         } catch (Throwable $e) {
             return new WP_Error('mkt_dispute_failed', __('The dispute could not be opened.', 'marketplace'), ['status' => 500, 'trace_id' => MKT_Audit::trace_id()]);
@@ -266,7 +282,13 @@ final class MKT_Moderation {
             'safe_summary' => sprintf(__('Deal dispute status changed to %s.', 'marketplace'), $to),
             'url' => home_url('/marketplace/deal/' . (string) $row['deal_public_id'] . '/'),
         ], 'restricted');
-        return self::dispute_dto($wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('disputes') . ' WHERE id=%d', (int) $row['id']), ARRAY_A));
+        $confirmed = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('disputes') . ' WHERE id=%d', (int) $row['id']), ARRAY_A);
+        if (!is_array($confirmed) || (string) ($confirmed['public_id'] ?? '') !== $public_id
+            || (string) ($confirmed['status'] ?? '') !== $to
+            || (int) ($confirmed['version'] ?? 0) !== $expected_version + 1) {
+            return new WP_Error('mkt_dispute_transition_readback_failed', __('The dispute decision could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+        }
+        return self::dispute_dto($confirmed);
     }
 
     /** A direct PHP moderation caller cannot impersonate a reporter or reviewer. */
