@@ -62,6 +62,10 @@
 39. CF05 optional aggregate warehouse, not canonical Marketplace store
 40. CF06 optional localization workflow, not source-content owner
 
+## Independent QA-harness defect discovered after the first green run
+
+An exact CI log review discovered a separate test-orchestration bug: the added RC30 stage in `qa-static.sh` contained **literal backslash-n characters** rather than actual line breaks, so the new negative test was executed by its dedicated GitHub Actions step but **not** by each of the forty full-suite repetitions. The first green run is therefore not evidence for forty RC30 audit-test executions. The script now uses actual LF-separated `echo`, `php` and following-stage lines. Only a new exact-head CI run whose logs show `[55/59]`, the RC30 test output and 40 distinct successful full-suite passes on **both** PHP versions can certify RC30. This is one QA harness defect, corrected at source level, not a third Marketplace runtime/audit defect. No live verification is implied.
+
 ## Blockers not corrected by a repository-only patch
 
 - **Issue #17:** WPVibe still has no connected site; Cloudflare HTTP 530 on WordPress connection. Need Cloudflare 1xxx/Ray ID/origin/DNS diagnostics, deployed active plugin/version/package hash, DB tables/options/migrations, error logs and actual deployed-vs-source parity. HTTP 530 alone is not a finding of bad firewall rules.
