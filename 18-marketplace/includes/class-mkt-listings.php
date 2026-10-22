@@ -3,6 +3,8 @@ defined('ABSPATH') || exit;
 
 final class MKT_Listings {
     public static function ensure_seller(int $user_id): array|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         $eligibility = MKT_Auth::seller_eligibility($user_id);
         if (!$eligibility['eligible']) {
             return new WP_Error('mkt_seller_ineligible', __('Your account is not eligible to sell.', 'marketplace'), ['status' => 403, 'reasons' => $eligibility['reasons']]);
@@ -73,6 +75,8 @@ final class MKT_Listings {
     }
 
     public static function create(array $input, int $user_id): array|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'create_listing']);
         if (is_wp_error($auth)) {
             return $auth;
@@ -136,6 +140,8 @@ final class MKT_Listings {
     }
 
     public static function update(string $public_id, array $input, int $user_id, int $expected_version): array|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'update_listing']);
         if (is_wp_error($auth)) return $auth;
         $listing = self::get($public_id, true);
@@ -198,6 +204,8 @@ final class MKT_Listings {
     }
 
     public static function submit(string $public_id, int $user_id, int $expected_version): array|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'submit_listing']);
         if (is_wp_error($auth)) return $auth;
         $listing = self::get($public_id, true);
@@ -239,6 +247,8 @@ final class MKT_Listings {
     }
 
     public static function transition(string $public_id, string $to, int $actor_id, int $expected_version, string $reason = '', string $note = ''): array|WP_Error {
+        $actor = self::require_current_actor($actor_id);
+        if (is_wp_error($actor)) return $actor;
         // Native WordPress admin, REST and other File18 owner callers must
         // share the SAME state + audit + event atomicity guarantee.
         try {
@@ -328,6 +338,8 @@ final class MKT_Listings {
     }
 
     public static function attach_media(string $public_id, array $media_input, int $user_id): array|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'attach_listing_media']);
         if (is_wp_error($auth)) return $auth;
         $listing = self::get($public_id, true);
@@ -411,6 +423,8 @@ final class MKT_Listings {
 
 
     public static function remove_media(string $public_id, string $media_public_id, int $user_id): bool|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'remove_listing_media']);
         if (is_wp_error($auth)) return $auth;
         $listing = self::get($public_id, true);
@@ -443,6 +457,8 @@ final class MKT_Listings {
     }
 
     public static function save(string $public_id, int $user_id, bool $save = true): bool|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_buy', ['action' => 'save_listing']);
         if (is_wp_error($auth)) return $auth;
         $listing = self::get($public_id, false);
@@ -472,6 +488,8 @@ final class MKT_Listings {
     }
 
     public static function open_chat(string $public_id, int $user_id): array|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_buy', ['action' => 'open_listing_chat']);
         if (is_wp_error($auth)) return $auth;
         $listing = self::get($public_id, false);
@@ -498,6 +516,14 @@ final class MKT_Listings {
         }
         MKT_Audit::record('listing_chat_opened', 'listing', $public_id, ['conversation_id' => $result['conversation_id']]);
         return $result;
+    }
+
+    /** Owner commands may not act on a PHP-supplied principal different from WordPress. */
+    private static function require_current_actor(int $actor_id): bool|WP_Error {
+        if ($actor_id <= 0 || $actor_id !== (int) get_current_user_id()) {
+            return new WP_Error('mkt_actor_mismatch', __('The requested account does not match the authenticated Marketplace actor.', 'marketplace'), ['status' => 403]);
+        }
+        return true;
     }
 
     /** Canonical UTC deadline guard; an absent or malformed expiry never authorizes commerce. */
