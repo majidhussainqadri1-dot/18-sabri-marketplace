@@ -48,6 +48,12 @@ foreach([99,0] as $spoof){
   assert_same('mkt_actor_mismatch',$result->get_error_code(),$name.' returns stable IDOR denial.');
  }
 }
-assert_same(0,$wpdb->reads,'No private owner read occurs on 50 identity-mismatched paths.');
+// A private search is a separate read surface with no mandatory actor argument.
+foreach([[], ['seller_user_id'=>99], ['seller_user_id'=>0]] as $filter) {
+ $private=MKT_Listings::search($filter,true);
+ assert_same('mkt_private_search_forbidden',$private['error']??null,'Private listing search requires the exact logged-in seller ID.');
+ assert_same([],$private['items'],'Private listing search never leaks another seller draft.');
+}
+assert_same(0,$wpdb->reads,'No private owner read occurs on 50 mismatched actor paths or 3 unscoped private searches.');
 assert_same(0,$wpdb->writes,'No state/audit/outbox write occurs on 50 identity-mismatched paths.');
 fwrite(STDOUT,"RC23 25 canonical owner actions x 2 spoofed users fail closed before DB access.\n");
