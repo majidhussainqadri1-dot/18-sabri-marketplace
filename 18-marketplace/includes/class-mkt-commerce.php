@@ -34,8 +34,16 @@ final class MKT_Commerce {
             return MKT_DB::transaction(function() use ($wpdb, $listing, $buyer_id, $amount, $currency, $input, $idempotency_key, $expires_hours) {
                 $existing = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE idempotency_key=%s', $idempotency_key), ARRAY_A);
                 if ($existing) {
-                    if ((int) $existing['buyer_user_id'] !== $buyer_id) {
-                        return new WP_Error('mkt_idempotency_conflict', __('The idempotency key belongs to another request.', 'marketplace'), ['status' => 409]);
+                    // A key identifies one immutable command payload, not just
+                    // one buyer. Returning a prior offer for a different listing,
+                    // amount, terms or validity period is false replay success.
+                    if ((int) $existing['buyer_user_id'] !== $buyer_id
+                        || (int) $existing['listing_id'] !== (int) $listing['id']
+                        || (float) $existing['amount'] !== $amount
+                        || (string) $existing['currency'] !== $currency
+                        || (string) $existing['terms'] !== wp_kses_post((string) ($input['terms'] ?? ''))
+                        || !self::same_offer_duration($existing, $expires_hours)) {
+                        return new WP_Error('mkt_idempotency_conflict', __('The idempotency key belongs to a different offer request.', 'marketplace'), ['status' => 409]);
                     }
                     return self::offer_dto($existing);
                 }
@@ -144,8 +152,12 @@ final class MKT_Commerce {
                 if ($to === 'countered') {
                     $idempotent = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE idempotency_key=%s', $idempotency_key), ARRAY_A);
                     if ($idempotent) {
-                        if ((int) $idempotent['created_by'] !== $actor_id || (int) $idempotent['parent_offer_id'] !== (int) $offer['id']) {
-                            return new WP_Error('mkt_idempotency_conflict', __('The idempotency key belongs to another counter-offer.', 'marketplace'), ['status' => 409]);
+                        if ((int) $idempotent['created_by'] !== $actor_id
+                            || (int) $idempotent['parent_offer_id'] !== (int) $offer['id']
+                            || (float) $idempotent['amount'] !== (is_numeric($input['amount'] ?? null) ? round((float) $input['amount'], 2) : NAN)
+                            || (string) $idempotent['terms'] !== wp_kses_post((string) ($input['terms'] ?? ''))
+                            || !self::same_offer_duration($idempotent, min(168, max(1, (int) ($input['expires_hours'] ?? 48))))) {
+                            return new WP_Error('mkt_idempotency_conflict', __('The idempotency key belongs to a different counter-offer request.', 'marketplace'), ['status' => 409]);
                         }
                         return self::offer_dto($idempotent);
                     }
@@ -610,6 +622,17 @@ final class MKT_Commerce {
             'listing_title' => (string) ($row['listing_title'] ?? ''),
             'url' => home_url('/marketplace/deal/' . rawurlencode((string) $row['public_id']) . '/'),
         ];
+    }
+
+    /** Strict persisted expiry window verification, tolerant only to clock-second precision. */
+    private static function same_offer_duration(array $existing, int $requested_hours): bool {
+        $created = (string) ($existing['created_at'] ?? '');
+        $expires = (string) ($existing['expires_at'] ?? '');
+        if (!preg_match('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/', $created)
+            || !preg_match('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/', $expires)) return false;
+        $start = strtotime($created . ' UTC');
+        $end = strtotime($expires . ' UTC');
+        return $start !== false && $end !== false && abs(($end - $start) - $requested_hours * HOUR_IN_SECONDS) <= 5;
     }
 
     private static function idempotency_key(string $key): string|WP_Error {

@@ -111,7 +111,7 @@ assert_true(str_contains($policy, 'is_finite((float)') &&
 assert_true(str_contains($listings, 'private static function validate_numeric_input(') &&
     substr_count($listings, 'self::validate_numeric_input(') === 2,
     'Both listing creation and edit validate the raw price before any numeric coercion.');
-assert_true(substr_count($commerce, "is_numeric($" . "input['amount'] ?? null)") === 2,
+assert_true(substr_count($commerce, "is_numeric($" . "input['amount'] ?? null)") >= 2,
     'Offer and counteroffer inputs reject partially numeric strings rather than casting them.');
 
 assert_true(str_contains($events, "FOR UPDATE") && str_contains($events, 'RECLAIM_STALE') === false

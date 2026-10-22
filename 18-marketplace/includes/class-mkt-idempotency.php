@@ -79,8 +79,16 @@ final class MKT_Idempotency {
             }
             return $result;
         } catch (Throwable $e) {
-            $wpdb->update($table, ['status' => 'failed', 'response_code' => 500, 'response_json' => wp_json_encode(['code' => 'mkt_internal_error'])], ['actor_user_id' => $actor_id, 'scope' => $scope, 'idempotency_key' => $key]);
-            throw $e;
+            // A callback can throw AFTER committing its owner mutation. The
+            // outcome is unknown, not a verified failure. Moving its receipt
+            // to 'failed' would authorize a blind replay of a completed
+            // purchase/report/payment fact. Preserve 'processing' until an
+            // operator reconciles the authoritative owner record.
+            return new WP_Error(
+                'mkt_idempotency_outcome_uncertain',
+                __('The request may already have completed. Its result requires reconciliation before retrying.', 'marketplace'),
+                ['status' => 503]
+            );
         }
     }
 
