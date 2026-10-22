@@ -75,6 +75,16 @@ final class MKT_Listings {
     }
 
     public static function create(array $input, int $user_id): array|WP_Error {
+        // Even direct PHP callers must commit the listing, audit and File19
+        // event outbox as one owner transaction, not as partial writes.
+        try {
+            return MKT_DB::transaction(static fn() => self::create_owner($input, $user_id));
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_listing_create_atomic_failed', __('The listing could not be created and audited safely.', 'marketplace'), ['status' => 503, 'trace_id' => MKT_Audit::trace_id()]);
+        }
+    }
+
+    private static function create_owner(array $input, int $user_id): array|WP_Error {
         $actor = self::require_current_actor($user_id);
         if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'create_listing']);
@@ -133,13 +143,29 @@ final class MKT_Listings {
         if (!$wpdb->insert(MKT_DB::table('listings'), $insert)) {
             return new WP_Error('mkt_listing_create_failed', __('The listing could not be created.', 'marketplace'), ['status' => 500]);
         }
-        $listing = self::get_by_id((int) $wpdb->insert_id, true);
+        $new_listing_id = (int) $wpdb->insert_id;
+        $listing = $new_listing_id > 0 ? self::get_by_id($new_listing_id, true) : null;
+        if (!is_array($listing) || (int) ($listing['id'] ?? 0) !== $new_listing_id
+            || (string) ($listing['public_id'] ?? '') !== $public_id
+            || (int) ($listing['seller_id'] ?? 0) !== (int) $seller['id']
+            || (string) ($listing['status'] ?? '') !== 'draft'
+            || (int) ($listing['version'] ?? 0) !== 1) {
+            return new WP_Error('mkt_listing_create_readback_failed', __('The new listing could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+        }
         MKT_Audit::record('listing_created', 'listing', $public_id, ['category' => $data['category'], 'policy_holds' => $policy['holds']]);
         MKT_Events::enqueue('MarketplaceListingCreated.v1', 'listing', $public_id, ['seller_user_id' => $user_id, 'safe_summary' => __('A listing draft was created.', 'marketplace')]);
         return self::private_dto($listing);
     }
 
     public static function update(string $public_id, array $input, int $user_id, int $expected_version): array|WP_Error {
+        try {
+            return MKT_DB::transaction(static fn() => self::update_owner($public_id, $input, $user_id, $expected_version));
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_listing_update_atomic_failed', __('The listing edit could not be committed and audited safely.', 'marketplace'), ['status' => 503, 'trace_id' => MKT_Audit::trace_id()]);
+        }
+    }
+
+    private static function update_owner(string $public_id, array $input, int $user_id, int $expected_version): array|WP_Error {
         $actor = self::require_current_actor($user_id);
         if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'update_listing']);
@@ -195,15 +221,35 @@ final class MKT_Listings {
             $changes['moderation_note'] = '';
             $changes['submitted_at'] = null;
         }
-        $updated = $wpdb->update(MKT_DB::table('listings'), $changes, ['id' => (int) $listing['id'], 'version' => $expected_version]);
+        $updated = $wpdb->update(MKT_DB::table('listings'), $changes, [
+            'id' => (int) $listing['id'], 'version' => $expected_version,
+            'status' => (string) $listing['status'],
+        ]);
         if (!$updated) {
             return new WP_Error('mkt_stale_version', __('The listing changed. Reload and try again.', 'marketplace'), ['status' => 409]);
         }
         MKT_Audit::record('listing_updated', 'listing', $public_id, ['version' => $expected_version + 1]);
-        return self::private_dto(self::get($public_id, true));
+        $confirmed = self::get($public_id, true);
+        $expected_status = $revision_to_draft ? 'draft' : (string) $listing['status'];
+        if (!is_array($confirmed) || (int) ($confirmed['id'] ?? 0) !== (int) $listing['id']
+            || (string) ($confirmed['public_id'] ?? '') !== $public_id
+            || (string) ($confirmed['status'] ?? '') !== $expected_status
+            || (int) ($confirmed['version'] ?? 0) !== $expected_version + 1
+            || (int) ($confirmed['seller_user_id'] ?? 0) !== (int) $listing['seller_user_id']) {
+            return new WP_Error('mkt_listing_update_readback_failed', __('The listing edit could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+        }
+        return self::private_dto($confirmed);
     }
 
     public static function submit(string $public_id, int $user_id, int $expected_version): array|WP_Error {
+        try {
+            return MKT_DB::transaction(static fn() => self::submit_owner($public_id, $user_id, $expected_version));
+        } catch (Throwable $e) {
+            return new WP_Error('mkt_listing_submit_atomic_failed', __('The listing submission could not be committed and audited safely.', 'marketplace'), ['status' => 503, 'trace_id' => MKT_Audit::trace_id()]);
+        }
+    }
+
+    private static function submit_owner(string $public_id, int $user_id, int $expected_version): array|WP_Error {
         $actor = self::require_current_actor($user_id);
         if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'submit_listing']);
@@ -243,7 +289,15 @@ final class MKT_Listings {
         }
         MKT_Audit::record('listing_submitted', 'listing', $public_id, ['version' => $expected_version + 1]);
         MKT_Events::enqueue('MarketplaceListingSubmitted.v1', 'listing', $public_id, ['seller_user_id' => $user_id, 'safe_summary' => __('A listing was submitted for review.', 'marketplace')]);
-        return self::private_dto(self::get($public_id, true));
+        $confirmed = self::get($public_id, true);
+        if (!is_array($confirmed) || (int) ($confirmed['id'] ?? 0) !== (int) $listing['id']
+            || (string) ($confirmed['public_id'] ?? '') !== $public_id
+            || (string) ($confirmed['status'] ?? '') !== 'review'
+            || (int) ($confirmed['version'] ?? 0) !== $expected_version + 1
+            || (int) ($confirmed['seller_user_id'] ?? 0) !== $user_id) {
+            return new WP_Error('mkt_listing_submit_readback_failed', __('The listing submission could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+        }
+        return self::private_dto($confirmed);
     }
 
     public static function transition(string $public_id, string $to, int $actor_id, int $expected_version, string $reason = '', string $note = ''): array|WP_Error {
@@ -334,7 +388,14 @@ final class MKT_Listings {
             'safe_summary' => sprintf(__('Listing status changed to %s.', 'marketplace'), $to),
             'url' => self::url($listing),
         ]);
-        return self::private_dto(self::get($public_id, true));
+        $confirmed = self::get($public_id, true);
+        if (!is_array($confirmed) || (int) ($confirmed['id'] ?? 0) !== (int) $listing['id']
+            || (string) ($confirmed['public_id'] ?? '') !== $public_id
+            || (string) ($confirmed['status'] ?? '') !== $to
+            || (int) ($confirmed['version'] ?? 0) !== $expected_version + 1) {
+            return new WP_Error('mkt_listing_transition_readback_failed', __('The listing transition could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+        }
+        return self::private_dto($confirmed);
     }
 
     public static function attach_media(string $public_id, array $media_input, int $user_id): array|WP_Error {
