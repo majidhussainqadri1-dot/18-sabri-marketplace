@@ -73,7 +73,7 @@ class ReviewDB {
    if(str_contains($sql,'status NOT IN'))return null;
    $row=null;
    if(preg_match('/WHERE id=(\d+)/',$sql,$m))$row=$this->disputes[(int)$m[1]]??null;
-   elseif(str_contains($sql,"WHERE public_id='dispute-1'"))$row=$this->disputes[8];
+   elseif(str_contains($sql,"WHERE public_id='dispute-1'") || str_contains($sql,"WHERE d.public_id='dispute-1'"))$row=$this->disputes[8];
    elseif(preg_match("/WHERE public_id='([^']+)'/",$sql,$m))foreach($this->disputes as $d)if($d['public_id']===$m[1])$row=$d;
    return $this->corrupt($row,$this->write_seen && !str_contains($sql,'FOR UPDATE'));
   }
