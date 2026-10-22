@@ -138,7 +138,8 @@ function check_case(string $kind,string $mode):void{
   $error='mkt_offer_transition_readback_failed';
  }elseif($kind==='create_deal'){
   $method=new ReflectionMethod(MKT_Commerce::class,'create_deal_from_offer');
-  $r=$method->invoke(null,$wpdb->offers[10],2);
+  // This helper is only called inside the offer acceptance owner transaction.
+  $r=MKT_DB::transaction(static fn()=>$method->invoke(null,$wpdb->offers[10],2));
   $error='mkt_deal_readback_failed';
  }else{
   $r=MKT_Commerce::transition_deal('deal-1','cancelled',[],41,1);
