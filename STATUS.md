@@ -1,5 +1,13 @@
 # File 18 — Marketplace Release Status (20 October 2026)
 
+## RC25 — 23rd 40-control evidence-save lock/version source audit (22 Oct 2026)
+
+- **3 new source defect groups found / 3 corrected in RC25 source / 0 verified live fixes**: (1) `save_evidence` and `review_evidence` used contradictory lock ordering (deadlock risk); (2) `save_evidence` trusted non-locking preflight seller/state/category while writing; (3) omitted `expected_evidence_version` implicitly authorized overwriting current evidence. Exact source patch now locks listing before evidence, revalidates seller, draft/paused/rejected/appealed/expired state, category, expected listing version and evidence version, and fails closed on stale/missing values.
+- **Source tests:** actual `MKT_Governance` owner regression `tests/test-rc25-evidence-save-locking.php`, checking lock order, positive save, 5 denial scenarios, no invalid DB mutation. Plan trace: `docs/OCT-22-2026-TWENTYTHIRD-40-CONTROL-RC25-AUDIT.md`, 40 named File18/central/other-file requirements.
+- **Target QA** 54 named full-suite stages repeated 40× per PHP 8.1/8.3; final exact HEAD logs + deterministic `18-marketplace-2.1.0-RC25.zip` SHA must be checked before claiming success.
+- **Source only, Draft PR #27, not merged/deployed.** Open blockers #17 Cloudflare HTTP 530/no registered WPVibe live site (no deployed/plugin/DB/migration/host logs parity) and #18 approved immutable audit-chain archive/legal retention. Real MySQL staging, File00/10/17/19/20/24/25/26 integration, optional CF05/06, 58 central CV, backup/rollback, two independent reviews, Founder signoff and live retest unverified.
+- **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
 ## RC23 — 21st 40-control Owner Authorization Audit (22 Oct 2026)
 
 - **New source defects: 5 scoped groups**: private Commerce dashboard cross-user reads; private deal record read impersonation; commerce offer/deal mutation actor spoofing; direct seller/listing/media/File17/report/dispute/evidence/recall/legal-hold actor spoofing; unscoped draft/private listing search. These are source-code defects, **not proven deployed bugs**.
