@@ -22,6 +22,7 @@ class MKT_DB {
  private static int $serial=0;
  public static function uuid():string{return sprintf('00000000-0000-4000-8000-%012d',++self::$serial);}
  public static function now():string{return '2026-10-22 09:00:00';}
+ public static function currency(string $code):string{return strtoupper($code);}
  public static function table($t):string{return 'wp_mkt_'.$t;}
  public static function settings():array{return ['safe_mode'=>0,'selling_enabled'=>true,'listing_expiry_days'=>30];}
  public static function transaction(callable $f) {
