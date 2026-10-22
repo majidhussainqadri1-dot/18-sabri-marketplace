@@ -15,6 +15,8 @@ $audit = file_get_contents($root . '/includes/class-mkt-audit.php');
 $css = file_get_contents($root . '/assets/css/marketplace.css');
 $js = file_get_contents($root . '/assets/js/marketplace.js');
 $db = file_get_contents($root . '/includes/class-mkt-db.php');
+$listing_template = file_get_contents($root . '/templates/listing.php');
+$deal_template = file_get_contents($root . '/templates/deal.php');
 
 assert_true(str_contains($rest, 'MKT_Idempotency::run'), 'REST mutations are replay-protected.');
 assert_true(str_contains($js, "headers['Idempotency-Key']"), 'Browser mutations emit idempotency keys.');
@@ -40,4 +42,7 @@ assert_true(str_contains($audit, 'GET_LOCK') && str_contains($audit, 'verify_cha
 assert_true(str_contains($audit, 'if (!$inserted)') && str_contains($audit, 'audit evidence could not be persisted'), 'Required audit evidence cannot fail silently.');
 assert_true(!str_contains($css, '.mkt-button-small{min-height:36px') && str_contains($css, '.mkt-button-small{min-height:44px') && str_contains($css, '.mkt-tabs button{min-height:44px'), 'Interactive Marketplace controls preserve the central 44px minimum touch target.');
 assert_true(!preg_match('/\bmkt_(conversations?|messages?|calls?|wallets?|escrows?|payouts?)\b/i', $db), 'No parallel communication or money canonical table exists.');
+assert_true(strpos($listing_template, 'status_header(404)') < strpos($listing_template, "require MKT_DIR . 'templates/_header.php'"), 'Unavailable listing must set HTTP 404 before get_header emits a response.');
+assert_true(strpos($deal_template, 'status_header(404)') < strpos($deal_template, "require MKT_DIR . 'templates/_header.php'"), 'Unavailable or unauthorized deal must set HTTP 404 before get_header emits a response.');
+assert_true(str_contains($listing_template, "header('X-Robots-Tag: noindex, noarchive, nofollow'") && str_contains($listing_template, 'nocache_headers();'), 'Unavailable Listing 404 is private to noindex and no-store caching.');
 fwrite(STDOUT, "Adversarial invariant suite complete.\n");
