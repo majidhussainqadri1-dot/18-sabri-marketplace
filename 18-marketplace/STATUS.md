@@ -1,5 +1,13 @@
 # File 18 — Marketplace Module Status (20 October 2026)
 
+## RC22 — Twentieth 40-control source review (22 Oct 2026)
+
+- **3 new proven source defect groups / 3 source-corrected / 0 live fixes verified**: uncertain exception no longer marks idempotency command `failed`; offer-key reuse rejects changed listing, buyer, amount, terms and expiry; counter-offer-key reuse rejects altered amount, terms and expiry. Real owner-class negative regressions added.
+- Evidence: `docs/OCT-22-2026-TWENTIETH-40-CONTROL-RC22-AUDIT.md`; 40 named plan/other-file controls, not 40 independent manual end-to-end acceptance runs.
+- New QA: **51 named aggregate stages, repeated 40 times each on PHP 8.1 and 8.3**; final run result and release checksum must match final Draft PR HEAD before release assertion.
+- No Merge/Deploy. Unresolved #17 Cloudflare 530 and no WPVibe live deployed/DB/migration parity; #18 immutable audit archive governance; MySQL staging, real owner integration, 58 central CV, backup/recovery, independent reviews, Founder signoff and live retest.
+- **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
 ## RC20 — Eighteenth 40-control source audit (22 Oct 2026)
 
 - Four new independently scoped source defects addressed: transactional recall safety on **create offer**, **counter-offer**, and **accept-offer-to-deal**; **false-ready status from partial schema/commission SQL outage**.
