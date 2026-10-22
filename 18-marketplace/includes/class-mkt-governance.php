@@ -376,12 +376,33 @@ final class MKT_Governance {
         if ($expected !== (int) $row['version']) return new WP_Error('mkt_stale_evidence_version', __('The evidence record changed.', 'marketplace'), ['status' => 409]);
         $listing = MKT_Listings::get($listing_public_id, true);
         if (!$listing) return new WP_Error('mkt_listing_not_found', __('Listing not found.', 'marketplace'), ['status' => 404]);
+        if ($actor_id === (int) ($listing['created_by'] ?? 0) || $actor_id === (int) ($listing['seller_user_id'] ?? 0)) {
+            return new WP_Error('mkt_self_review_forbidden', __('A seller cannot review evidence for their own listing.', 'marketplace'), ['status' => 403]);
+        }
         if ($decision === 'approved') {
             $errors = self::validate_evidence_payload(json_decode((string) $row['evidence_json'], true) ?: [], (string) $listing['category']);
             if ($errors) return new WP_Error('mkt_evidence_invalid', __('Evidence cannot be approved until all required fields are valid.', 'marketplace'), ['status' => 422, 'errors' => $errors]);
         }
         try {
             return MKT_DB::transaction(function() use ($wpdb, $table, $row, $decision, $input, $actor_id, $listing_public_id) {
+                // Lock listing before evidence, identical to the strict REST
+                // owner. Earlier non-locking reads do not authorize mutation.
+                $locked_listing = $wpdb->get_row($wpdb->prepare(
+                    'SELECT l.*,s.user_id AS seller_user_id FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.public_id=%s FOR UPDATE',
+                    $listing_public_id
+                ), ARRAY_A);
+                if (!$locked_listing) return new WP_Error('mkt_listing_not_found', __('Listing not found.', 'marketplace'), ['status' => 404]);
+                if ($actor_id === (int) ($locked_listing['created_by'] ?? 0) || $actor_id === (int) $locked_listing['seller_user_id']) {
+                    return new WP_Error('mkt_self_review_forbidden', __('A seller cannot review evidence for their own listing.', 'marketplace'), ['status' => 403]);
+                }
+                $fresh = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE listing_public_id=%s FOR UPDATE", $listing_public_id), ARRAY_A);
+                if (!$fresh || (int) $fresh['version'] !== (int) $row['version']) {
+                    return new WP_Error('mkt_stale_evidence_version', __('The evidence record changed.', 'marketplace'), ['status' => 409]);
+                }
+                if ($decision === 'approved') {
+                    $errors = self::validate_evidence_payload(json_decode((string) $fresh['evidence_json'], true) ?: [], (string) $locked_listing['category']);
+                    if ($errors) return new WP_Error('mkt_evidence_invalid', __('Evidence cannot be approved until required facts are valid.', 'marketplace'), ['status' => 422, 'errors' => $errors]);
+                }
                 $updated = $wpdb->update($table, [
                     'status' => $decision,
                     'version' => (int) $row['version'] + 1,
@@ -391,11 +412,30 @@ final class MKT_Governance {
                     'reviewed_at' => MKT_DB::now(),
                 ], ['id' => (int) $row['id'], 'version' => (int) $row['version']]);
                 if ($updated !== 1) return new WP_Error('mkt_stale_evidence_version', __('The evidence record changed.', 'marketplace'), ['status' => 409]);
+                $paused = false;
+                if ($decision === 'rejected' && (string) $locked_listing['status'] === 'active') {
+                    $paused_update = $wpdb->update(MKT_DB::table('listings'), [
+                        'status' => 'paused', 'updated_at' => MKT_DB::now(),
+                        'updated_by' => $actor_id, 'version' => (int) $locked_listing['version'] + 1,
+                    ], ['id' => (int) $locked_listing['id'], 'version' => (int) $locked_listing['version'], 'status' => 'active']);
+                    if ($paused_update !== 1) return new WP_Error('mkt_listing_evidence_pause_conflict', __('Listing changed during evidence rejection.', 'marketplace'), ['status' => 409]);
+                    $paused = true;
+                }
                 MKT_Events::enqueue('MarketplaceListingEvidenceReviewed.v1', 'listing', $listing_public_id, [
                     'status' => $decision,
+                    'notify_user_ids' => [(int) $locked_listing['seller_user_id']],
                     'safe_summary' => sprintf(__('Listing evidence review status changed to %s.', 'marketplace'), $decision),
                 ], 'restricted');
-                MKT_Audit::record('listing_evidence_reviewed', 'listing', $listing_public_id, ['decision' => $decision], 'success', '', 'marketplace_evidence');
+                if ($paused) {
+                    MKT_Events::enqueue('MarketplaceListingStatusChanged.v1', 'listing', $listing_public_id, [
+                        'from' => 'active', 'to' => 'paused', 'reason' => 'evidence_rejected',
+                        'notify_user_ids' => [(int) $locked_listing['seller_user_id']],
+                        'safe_summary' => __('Listing paused because regulated evidence was rejected.', 'marketplace'),
+                    ], 'restricted');
+                }
+                MKT_Audit::record('listing_evidence_reviewed', 'listing', $listing_public_id, [
+                    'decision' => $decision, 'self_review_prevented' => true, 'listing_paused' => $paused,
+                ], 'success', '', 'marketplace_evidence');
                 return self::evidence_record($listing_public_id, true);
             });
         } catch (Throwable $e) {
