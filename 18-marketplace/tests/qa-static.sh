@@ -165,7 +165,10 @@ php "$ROOT/tests/test-rc27-commerce-final-readback.php"
 echo '[54/59] RC28 Listing four owner mutation atomicity and final receipt rollback tests'
 php "$ROOT/tests/test-rc28-listing-atomic-receipts.php"
 
-echo '[55/59] RC30 actual audit-chain SQL failures and verified genesis'\nphp "$ROOT/tests/test-rc30-audit-source-failclosed.php"\n\necho '[56/59] Required documentation and assets'
+echo '[55/59] RC30 actual audit-chain SQL failures and verified genesis'
+php "$ROOT/tests/test-rc30-audit-source-failclosed.php"
+
+echo '[56/59] Required documentation and assets'
 for f in marketplace.php uninstall.php readme.txt README.md CHANGELOG.md assets/css/marketplace.css assets/js/marketplace.js assets/js/marketplace-completion.js includes/class-mkt-governance.php includes/class-mkt-plan-completion.php includes/class-mkt-finalization.php includes/class-mkt-release-gates.php docs/REQUIREMENTS-TRACEABILITY.md docs/STAGING-ACCEPTANCE.md docs/FOUR-ROUND-GOVERNING-PLAN-AUDIT.md; do test -s "$ROOT/$f"; done
 
 echo '[57/59] Forbidden artifact scan'
