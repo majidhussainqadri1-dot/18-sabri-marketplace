@@ -41,6 +41,7 @@ class ReviewDB {
  public array $audits=[];
  public int $writes=0;
  public bool $pause_fails=false;
+ public bool $readback_fails=false;
  public function __construct(){$this->listing=[
   'id'=>6,'public_id'=>'listing-01','created_by'=>42,'seller_user_id'=>42,
   'status'=>'active','version'=>5,'category'=>'homeopathic_medicines',
@@ -55,6 +56,8 @@ class ReviewDB {
  public function get_var(string $sql):string{return 'wp_mkt_listing_evidence';}
  public function get_row(string $sql,$kind):?array {
   if(str_contains($sql,'wp_mkt_listings'))return $this->listing;
+  if($this->readback_fails && $this->writes>0
+     && str_contains($sql,'wp_mkt_listing_evidence') && !str_contains($sql,'FOR UPDATE'))return null;
   if(str_contains($sql,'wp_mkt_listing_evidence'))return $this->evidence;
   return null;
  }
@@ -100,4 +103,13 @@ assert_same('mkt_listing_evidence_pause_conflict',$failure->get_error_code(),'Li
 assert_same('pending',$wpdb->evidence['status'],'Evidence rejected state rolled back with failed listing pause.');
 assert_same('active',$wpdb->listing['status'],'Listing remains intact, review needs retry.');
 assert_same(0,count($wpdb->events),'Failed owner transaction emits no outbox facts.');
+$wpdb=new ReviewDB();
+$wpdb->readback_fails=true;
+$readback=MKT_Governance::review_evidence('listing-01',$input,23);
+assert_true(is_wp_error($readback),'Post-write evidence review readback outage denies completion.');
+assert_same('mkt_evidence_readback_failed',$readback->get_error_code(),'Readback outage has a specific rollback error.');
+assert_same('pending',$wpdb->evidence['status'],'Readback outage cannot commit rejected evidence.');
+assert_same('active',$wpdb->listing['status'],'Readback outage cannot commit a hidden listing pause.');
+assert_same([],$wpdb->events,'Failed review readback discards outbox facts.');
+assert_same([],$wpdb->audits,'Failed review readback discards incomplete audit facts.');
 fwrite(STDOUT,"RC24 native medical evidence self-review, locked recheck and atomic pause passed.\n");
