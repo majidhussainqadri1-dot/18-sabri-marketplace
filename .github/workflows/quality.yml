@@ -85,6 +85,8 @@ jobs:
         run: php 18-marketplace/tests/test-report-atomicity.php
       - name: Audit lock lifetime and nested transaction regression
         run: php 18-marketplace/tests/test-audit-transaction-lock.php
+      - name: RC30 audit chain predecessor and query failure truth
+        run: php 18-marketplace/tests/test-rc30-audit-source-failclosed.php
       - name: File 19 required notification fault injection
         run: php 18-marketplace/tests/test-outbox-required-notification-ack.php
       - name: Marketplace money and quantity numeric integrity
@@ -193,16 +195,16 @@ jobs:
           set -euo pipefail
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-a"
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
-          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC29.zip"
-          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC29.zip"
+          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC30.zip"
+          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC30.zip"
           cmp "$A" "$B"
           unzip -t "$A"
           HASH_A="$(sha256sum "$A" | awk '{print $1}')"
           HASH_B="$(sha256sum "$B" | awk '{print $1}')"
           test "$HASH_A" = "$HASH_B"
-          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC29.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC29.zip.sha256"
+          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC30.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC30.zip.sha256"
           {
-            echo '### File 18 Marketplace 2.1.0 RC29'
+            echo '### File 18 Marketplace 2.1.0 RC30'
             echo
             echo "SHA-256: \`$HASH_A\`"
             echo
@@ -211,9 +213,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.php == '8.3'
         with:
-          name: file18-marketplace-2.1.0-rc29
+          name: file18-marketplace-2.1.0-rc30
           path: |
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC29.zip
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC29.zip.sha256
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC30.zip
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC30.zip.sha256
           if-no-files-found: error
           retention-days: 14
