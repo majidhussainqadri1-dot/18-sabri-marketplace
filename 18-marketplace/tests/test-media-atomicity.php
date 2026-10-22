@@ -1,6 +1,7 @@
 <?php
 /** Media owner transaction/compensation fault simulation, real File18 methods. */
 require __DIR__.'/bootstrap.php';
+function get_current_user_id():int{return 41;}
 define('ARRAY_A','ARRAY_A');
 function sanitize_text_field($v):string{return strip_tags((string)$v);}
 function wp_json_encode($v):string{return json_encode($v);}
