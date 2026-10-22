@@ -3,6 +3,8 @@ defined('ABSPATH') || exit;
 
 final class MKT_Moderation {
     public static function create_report(array $input, int $user_id): array|WP_Error {
+        $identity = self::require_current_actor($user_id);
+        if (is_wp_error($identity)) return $identity;
         $auth = MKT_Auth::can('mkt_buy', ['action' => 'report']);
         if (is_wp_error($auth)) return $auth;
 
@@ -89,6 +91,8 @@ final class MKT_Moderation {
     }
 
     public static function transition_report(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
+        $identity = self::require_current_actor($actor_id);
+        if (is_wp_error($identity)) return $identity;
         // Object-state changes and their mandatory audit/outbox entries must
         // never diverge when this native owner is called without a REST wrapper.
         try {
@@ -157,6 +161,8 @@ final class MKT_Moderation {
     }
 
     public static function open_dispute(string $deal_public_id, array $input, int $user_id): array|WP_Error {
+        $identity = self::require_current_actor($user_id);
+        if (is_wp_error($identity)) return $identity;
         $deal = MKT_Commerce::get_deal($deal_public_id, $user_id);
         if (is_wp_error($deal)) return $deal;
         $reason = sanitize_key((string) ($input['reason'] ?? 'other'));
@@ -207,6 +213,8 @@ final class MKT_Moderation {
     }
 
     public static function transition_dispute(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
+        $identity = self::require_current_actor($actor_id);
+        if (is_wp_error($identity)) return $identity;
         // Object-state changes and their mandatory audit/outbox entries must
         // never diverge when this native owner is called without a REST wrapper.
         try {
@@ -259,6 +267,14 @@ final class MKT_Moderation {
             'url' => home_url('/marketplace/deal/' . (string) $row['deal_public_id'] . '/'),
         ], 'restricted');
         return self::dispute_dto($wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('disputes') . ' WHERE id=%d', (int) $row['id']), ARRAY_A));
+    }
+
+    /** A direct PHP moderation caller cannot impersonate a reporter or reviewer. */
+    private static function require_current_actor(int $actor_id): bool|WP_Error {
+        if ($actor_id <= 0 || $actor_id !== (int) get_current_user_id()) {
+            return new WP_Error('mkt_actor_mismatch', __('The requested account does not match the authenticated Marketplace actor.', 'marketplace'), ['status' => 403]);
+        }
+        return true;
     }
 
     private static function sanitize_evidence_refs(array $refs): array {
