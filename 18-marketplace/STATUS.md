@@ -1,5 +1,13 @@
 # File 18 — Marketplace Module Status (20 October 2026)
 
+## RC23 — 21st 40-control Owner Authorization Audit (22 Oct 2026)
+
+- **New source defects: 5 scoped groups**: private Commerce dashboard cross-user reads; private deal record read impersonation; commerce offer/deal mutation actor spoofing; direct seller/listing/media/File17/report/dispute/evidence/recall/legal-hold actor spoofing; unscoped draft/private listing search. These are source-code defects, **not proven deployed bugs**.
+- **Source correction**: 25 canonical owner methods bind caller-supplied user/actor IDs to authenticated WordPress `get_current_user_id()`, and private listing search requires exact owner seller filter. New actual owner-class regression covers 50 spoofed calls + 3 private query cases, requiring no SQL access. Existing legitimate-actor fixtures updated without weakening guards.
+- **Cross-plan evidence**: `docs/OCT-22-2026-TWENTYFIRST-40-CONTROL-RC23-AUDIT.md` — 30 File18 FR/NFR + 10 File00/10/17/19/20/24/25/26/CF05/CF06 owner controls. **52 named QA stages**, 40 full repeats for PHP 8.1 and 40 full repeats PHP 8.3, exact-head evidence required.
+- Source candidate `18-marketplace-2.1.0-RC23.zip`; Draft PR #25 on RC22, not merged/deployed. Open release blockers #17 Cloudflare 530 / no WPVibe live deployed and DB reality; #18 approved immutable audit-chain archive and legal retention. MySQL staging/real owner integrations/58 central CV/backup/rollback/independent approvals and production parity **unverified**.
+- **Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔**
+
 ## RC22 — Twentieth 40-control source review (22 Oct 2026)
 
 - **3 new proven source defect groups / 3 source-corrected / 0 live fixes verified**: uncertain exception no longer marks idempotency command `failed`; offer-key reuse rejects changed listing, buyer, amount, terms and expiry; counter-offer-key reuse rejects altered amount, terms and expiry. Real owner-class negative regressions added.

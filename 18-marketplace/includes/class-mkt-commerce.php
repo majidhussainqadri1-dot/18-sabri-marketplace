@@ -3,6 +3,8 @@ defined('ABSPATH') || exit;
 
 final class MKT_Commerce {
     public static function create_offer(string $listing_public_id, array $input, int $buyer_id, string $idempotency_key): array|WP_Error {
+        $actor = self::require_current_actor($buyer_id);
+        if (is_wp_error($actor)) return $actor;
         $auth = MKT_Auth::can('mkt_buy', ['action' => 'create_offer']);
         if (is_wp_error($auth)) {
             return $auth;
@@ -115,6 +117,8 @@ final class MKT_Commerce {
     }
 
     public static function transition_offer(string $public_id, string $to, array $input, int $actor_id, int $expected_version, string $idempotency_key): array|WP_Error {
+        $actor = self::require_current_actor($actor_id);
+        if (is_wp_error($actor)) return $actor;
         global $wpdb;
         $offer = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('offers') . ' WHERE public_id=%s', $public_id), ARRAY_A);
         if (!$offer) {
@@ -384,6 +388,8 @@ final class MKT_Commerce {
     }
 
     public static function transition_deal(string $public_id, string $to, array $input, int $actor_id, int $expected_version): array|WP_Error {
+        $actor = self::require_current_actor($actor_id);
+        if (is_wp_error($actor)) return $actor;
         // This canonical owner is callable outside the REST completion wrapper,
         // including File18 moderation and integration callers. Always commit
         // status, tamper-evident audit and outbox atomically at this boundary.
@@ -507,6 +513,8 @@ final class MKT_Commerce {
     }
 
     public static function dashboard(int $user_id): array|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         global $wpdb;
         $offers = self::dashboard_rows($wpdb->prepare(
             'SELECT o.*,l.public_id AS listing_public_id,l.title AS listing_title FROM ' . MKT_DB::table('offers') . ' o JOIN ' . MKT_DB::table('listings') . ' l ON l.id=o.listing_id WHERE o.buyer_user_id=%d OR o.seller_user_id=%d ORDER BY o.updated_at DESC LIMIT 100',
@@ -559,6 +567,8 @@ final class MKT_Commerce {
     }
 
     public static function get_deal(string $public_id, int $user_id): array|WP_Error {
+        $actor = self::require_current_actor($user_id);
+        if (is_wp_error($actor)) return $actor;
         global $wpdb;
         $deal = $wpdb->get_row($wpdb->prepare('SELECT * FROM ' . MKT_DB::table('deals') . ' WHERE public_id=%s', $public_id), ARRAY_A);
         if (!$deal) {
@@ -625,6 +635,14 @@ final class MKT_Commerce {
     }
 
     /** Strict persisted expiry window verification, tolerant only to clock-second precision. */
+    /** A caller-supplied ID can never impersonate the authenticated WordPress principal. */
+    private static function require_current_actor(int $actor_id): bool|WP_Error {
+        if ($actor_id <= 0 || $actor_id !== (int) get_current_user_id()) {
+            return new WP_Error('mkt_actor_mismatch', __('The requested account does not match the authenticated Marketplace actor.', 'marketplace'), ['status' => 403]);
+        }
+        return true;
+    }
+
     private static function same_offer_duration(array $existing, int $requested_hours): bool {
         $created = (string) ($existing['created_at'] ?? '');
         $expires = (string) ($existing['expires_at'] ?? '');

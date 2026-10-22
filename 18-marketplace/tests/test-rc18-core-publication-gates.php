@@ -1,6 +1,7 @@
 <?php
 /** RC18: direct PHP listing owner paths must enforce the same canonical safety gates as REST. */
 require __DIR__ . '/bootstrap.php';
+function get_current_user_id():int{return 41;}
 defined('ARRAY_A') || define('ARRAY_A','ARRAY_A');
 function current_user_can($cap): bool {return $cap==='mkt_moderate';}
 function wp_kses_post($x): string {return (string)$x;}

@@ -286,6 +286,8 @@ final class MKT_Governance {
     }
 
     public static function save_evidence(string $listing_public_id, array $input, int $actor_id): array|WP_Error {
+        $identity = self::require_current_actor($actor_id);
+        if (is_wp_error($identity)) return $identity;
         $auth = MKT_Auth::can('mkt_sell', ['action' => 'save_listing_evidence', 'listing_public_id' => $listing_public_id]);
         if (is_wp_error($auth)) return $auth;
         $listing = MKT_Listings::get($listing_public_id, true);
@@ -358,6 +360,8 @@ final class MKT_Governance {
     }
 
     public static function review_evidence(string $listing_public_id, array $input, int $actor_id): array|WP_Error {
+        $identity = self::require_current_actor($actor_id);
+        if (is_wp_error($identity)) return $identity;
         $auth = MKT_Auth::can('mkt_moderate', ['action' => 'review_listing_evidence', 'listing_public_id' => $listing_public_id]);
         if (is_wp_error($auth)) return $auth;
         $decision = sanitize_key((string) ($input['decision'] ?? ''));
@@ -515,7 +519,9 @@ final class MKT_Governance {
         return false;
     }
 
-    public static function seller_studio(int $user_id): array {
+    public static function seller_studio(int $user_id): array|WP_Error {
+        $identity = self::require_current_actor($user_id);
+        if (is_wp_error($identity)) return $identity;
         global $wpdb;
         $unavailable = ['available'=>false, 'error'=>'seller_studio_sources_unavailable', 'inventory'=>[], 'listing_quality'=>['average_score'=>null, 'reviewed'=>null], 'reports'=>null, 'inquiries'=>['available'=>false], 'response_sla'=>['available'=>false]];
         $wpdb->last_error = '';
@@ -575,6 +581,8 @@ final class MKT_Governance {
     }
 
     public static function create_recall(array $input, int $actor_id): array|WP_Error {
+        $identity = self::require_current_actor($actor_id);
+        if (is_wp_error($identity)) return $identity;
         $auth = MKT_Auth::can('mkt_moderate', ['action' => 'create_marketplace_recall']);
         if (is_wp_error($auth)) return $auth;
         $listing_public_id = sanitize_text_field((string) ($input['listing_public_id'] ?? ''));
@@ -612,6 +620,8 @@ final class MKT_Governance {
     }
 
     public static function transition_recall(string $public_id, array $input, int $actor_id): array|WP_Error {
+        $identity = self::require_current_actor($actor_id);
+        if (is_wp_error($identity)) return $identity;
         $auth = MKT_Auth::can('mkt_moderate', ['action' => 'transition_marketplace_recall']);
         if (is_wp_error($auth)) return $auth;
         $to = sanitize_key((string) ($input['to'] ?? ''));
@@ -694,6 +704,8 @@ final class MKT_Governance {
     }
 
     public static function create_hold(array $input, int $actor_id): array|WP_Error {
+        $identity = self::require_current_actor($actor_id);
+        if (is_wp_error($identity)) return $identity;
         $auth = self::retention_authorization('create_retention_hold');
         if (is_wp_error($auth)) return $auth;
         $object_type = sanitize_key((string) ($input['object_type'] ?? ''));
@@ -762,6 +774,8 @@ final class MKT_Governance {
     }
 
     public static function release_hold(string $public_id, array $input, int $actor_id): array|WP_Error {
+        $identity = self::require_current_actor($actor_id);
+        if (is_wp_error($identity)) return $identity;
         $auth = self::retention_authorization('release_retention_hold');
         if (is_wp_error($auth)) return $auth;
         global $wpdb;
@@ -791,6 +805,14 @@ final class MKT_Governance {
         } catch (Throwable $e) {
             return new WP_Error('mkt_hold_release_failed', __('The hold release could not be saved and audited safely.', 'marketplace'), ['status' => 503]);
         }
+    }
+
+    /** Governance authorization is tied to the authenticated request actor. */
+    private static function require_current_actor(int $actor_id): bool|WP_Error {
+        if ($actor_id <= 0 || $actor_id !== (int) get_current_user_id()) {
+            return new WP_Error('mkt_actor_mismatch', __('The requested account does not match the authenticated Marketplace actor.', 'marketplace'), ['status' => 403]);
+        }
+        return true;
     }
 
     private static function retention_authorization(string $action) {

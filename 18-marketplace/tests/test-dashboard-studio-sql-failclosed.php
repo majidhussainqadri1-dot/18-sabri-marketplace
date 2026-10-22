@@ -1,6 +1,7 @@
 <?php
 /** RC16 actual dashboard & Seller Studio SQL-outage negative paths. */
 require __DIR__.'/bootstrap.php';
+function get_current_user_id():int{return 23;}
 defined('ARRAY_A') || define('ARRAY_A','ARRAY_A');
 function sanitize_text_field($v): string { return trim(strip_tags((string)$v)); }
 function wp_strip_all_tags($v): string { return strip_tags((string)$v); }

@@ -1,6 +1,7 @@
 <?php
 /** RC20: Actual canonical commerce class denies recalled commitments under locks. */
 require __DIR__.'/bootstrap.php';
+function get_current_user_id():int{return (int)($GLOBALS['rc23_actor']??41);}
 defined('ARRAY_A') || define('ARRAY_A','ARRAY_A');
 defined('HOUR_IN_SECONDS') || define('HOUR_IN_SECONDS',3600);
 function sanitize_text_field($v):string{return trim(strip_tags((string)$v));}
@@ -68,8 +69,10 @@ function assert_recall_result($result,string $mode,string $action):void {
 }
 foreach(['recalled','outage'] as $mode) {
  MKT_Governance::$mode=$mode;
+ $GLOBALS['rc23_actor']=41;
  $one=MKT_Commerce::create_offer('listing-id',['amount'=>10,'currency'=>'PKR'],41,$key);
  assert_recall_result($one,$mode,'create_offer');
+ $GLOBALS['rc23_actor']=2;
  $two=MKT_Commerce::transition_offer('offer-id','countered',['amount'=>12],2,1,$key.'-counter');
  assert_recall_result($two,$mode,'counter_offer');
  $ref=new ReflectionMethod(MKT_Commerce::class,'create_deal_from_offer');

@@ -1,6 +1,7 @@
 <?php
 /** RC21 actual classes: direct listing, report and dispute transitions cannot leave state without mandatory audit. */
 require __DIR__.'/bootstrap.php';
+function get_current_user_id():int{return (int)($GLOBALS['rc23_actor']??41);}
 defined('ARRAY_A')||define('ARRAY_A','ARRAY_A');
 function current_user_can($cap):bool{return false;}
 function sanitize_text_field($v):string{return trim(strip_tags((string)$v));}
@@ -63,11 +64,13 @@ assert_true(is_wp_error($listing),'Direct listing state change fails on mandator
 assert_same('mkt_listing_atomic_failed',$listing->get_error_code(),'Listing owner surfaces safe commit failure.');
 assert_same($before,$wpdb->rows['listings'],'Listing status/version rolled back.');
 $before=$wpdb->rows['reports'];
+$GLOBALS['rc23_actor']=5;
 $report=MKT_Moderation::transition_report('report-a','no_action',[],5,1);
 assert_true(is_wp_error($report),'Direct report moderation fails on audit outage.');
 assert_same('mkt_report_transition_atomic_failed',$report->get_error_code(),'Report owner surfaces safe commit failure.');
 assert_same($before,$wpdb->rows['reports'],'Report state/decision rolled back.');
 $before=$wpdb->rows['disputes'];
+$GLOBALS['rc23_actor']=41;
 $dispute=MKT_Moderation::transition_dispute('dispute-a','evidence',[],41,1);
 assert_true(is_wp_error($dispute),'Direct participant dispute transition fails on audit outage.');
 assert_same('mkt_dispute_transition_atomic_failed',$dispute->get_error_code(),'Dispute owner surfaces safe commit failure.');
