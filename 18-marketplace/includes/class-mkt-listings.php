@@ -75,6 +75,8 @@ final class MKT_Listings {
     }
 
     public static function create(array $input, int $user_id): array|WP_Error {
+        $identity = self::require_current_actor($user_id);
+        if (is_wp_error($identity)) return $identity;
         // Even direct PHP callers must commit the listing, audit and File19
         // event outbox as one owner transaction, not as partial writes.
         try {
@@ -158,6 +160,8 @@ final class MKT_Listings {
     }
 
     public static function update(string $public_id, array $input, int $user_id, int $expected_version): array|WP_Error {
+        $identity = self::require_current_actor($user_id);
+        if (is_wp_error($identity)) return $identity;
         try {
             return MKT_DB::transaction(static fn() => self::update_owner($public_id, $input, $user_id, $expected_version));
         } catch (Throwable $e) {
@@ -242,6 +246,8 @@ final class MKT_Listings {
     }
 
     public static function submit(string $public_id, int $user_id, int $expected_version): array|WP_Error {
+        $identity = self::require_current_actor($user_id);
+        if (is_wp_error($identity)) return $identity;
         try {
             return MKT_DB::transaction(static fn() => self::submit_owner($public_id, $user_id, $expected_version));
         } catch (Throwable $e) {
