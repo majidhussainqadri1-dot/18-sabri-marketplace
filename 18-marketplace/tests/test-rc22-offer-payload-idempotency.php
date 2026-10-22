@@ -2,6 +2,7 @@
 /** RC22 real Commerce owner: a reused key must match the full persisted offer command. */
 require __DIR__.'/bootstrap.php';
 defined('ARRAY_A') || define('ARRAY_A','ARRAY_A');
+defined('HOUR_IN_SECONDS') || define('HOUR_IN_SECONDS', 3600);
 function wp_kses_post($x):string{return (string)$x;}
 function sanitize_text_field($x):string{return trim(strip_tags((string)$x));}
 final class MKT_DB {
