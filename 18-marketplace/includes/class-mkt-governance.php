@@ -379,7 +379,13 @@ final class MKT_Governance {
                     'safe_summary' => __('Structured listing evidence was updated and requires review.', 'marketplace'),
                 ], 'restricted');
                 MKT_Audit::record('listing_evidence_saved', 'listing', $listing_public_id, ['category' => $fresh_listing['category']], 'success', '', 'marketplace_evidence');
-                return self::evidence_record($listing_public_id, true);
+                $confirmed = self::evidence_record($listing_public_id, true);
+                $new_version = $row ? (int) $row['version'] + 1 : 1;
+                if (!$confirmed || (int) ($confirmed['version'] ?? 0) !== $new_version
+                    || (string) ($confirmed['status'] ?? '') !== 'pending') {
+                    return new WP_Error('mkt_evidence_readback_failed', __('Updated evidence could not be verified; the save was rolled back.', 'marketplace'), ['status' => 503]);
+                }
+                return $confirmed;
             });
         } catch (Throwable $e) {
             return new WP_Error('mkt_evidence_save_failed', __('The evidence could not be saved safely.', 'marketplace'), ['status' => 500, 'trace_id' => MKT_Audit::trace_id()]);
@@ -463,7 +469,12 @@ final class MKT_Governance {
                 MKT_Audit::record('listing_evidence_reviewed', 'listing', $listing_public_id, [
                     'decision' => $decision, 'self_review_prevented' => true, 'listing_paused' => $paused,
                 ], 'success', '', 'marketplace_evidence');
-                return self::evidence_record($listing_public_id, true);
+                $confirmed = self::evidence_record($listing_public_id, true);
+                if (!$confirmed || (int) ($confirmed['version'] ?? 0) !== (int) $row['version'] + 1
+                    || (string) ($confirmed['status'] ?? '') !== $decision) {
+                    return new WP_Error('mkt_evidence_readback_failed', __('Reviewed evidence could not be verified; the decision was rolled back.', 'marketplace'), ['status' => 503]);
+                }
+                return $confirmed;
             });
         } catch (Throwable $e) {
             return new WP_Error('mkt_evidence_review_failed', __('The evidence review could not be saved safely.', 'marketplace'), ['status' => 500, 'trace_id' => MKT_Audit::trace_id()]);
