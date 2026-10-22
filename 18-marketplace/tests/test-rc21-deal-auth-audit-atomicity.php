@@ -1,6 +1,7 @@
 <?php
 /** RC21 actual commerce: File00 risk still governs deal cancel/dispute; audit crash rolls back direct PHP mutation. */
 require __DIR__.'/bootstrap.php';
+function get_current_user_id():int{return 41;}
 defined('ARRAY_A')||define('ARRAY_A','ARRAY_A');
 function current_user_can($cap):bool{return false;}
 function sanitize_text_field($v):string{return trim(strip_tags((string)$v));}
