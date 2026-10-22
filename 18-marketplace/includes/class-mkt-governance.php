@@ -310,17 +310,44 @@ final class MKT_Governance {
         global $wpdb;
         try {
             return MKT_DB::transaction(function() use ($wpdb, $listing, $listing_public_id, $evidence, $input, $actor_id, $expected_listing_version) {
+                // Serialize on the listing BEFORE its evidence record.
+                // Evidence review uses the same lock ordering and concurrent
+                // publication/ownership changes must be seen here afresh.
+                $fresh_listing = $wpdb->get_row($wpdb->prepare(
+                    'SELECT l.*,s.user_id AS seller_user_id FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.public_id=%s FOR UPDATE',
+                    $listing_public_id
+                ), ARRAY_A);
+                if (!$fresh_listing || (int) $fresh_listing['seller_user_id'] !== $actor_id
+                    || (int) $fresh_listing['id'] !== (int) $listing['id']) {
+                    return new WP_Error('mkt_listing_not_found', __('Listing no longer belongs to the current seller.', 'marketplace'), ['status' => 404]);
+                }
+                if (!in_array((string) $fresh_listing['status'], ['draft','paused','rejected','appealed','expired'], true)) {
+                    return new WP_Error('mkt_evidence_state_locked', __('Evidence cannot be changed after the listing state changed.', 'marketplace'), ['status' => 409]);
+                }
+                if ((int) $fresh_listing['version'] !== $expected_listing_version) {
+                    return new WP_Error('mkt_stale_version', __('The listing changed. Reload and try again.', 'marketplace'), ['status' => 409, 'current_version' => (int) $fresh_listing['version']]);
+                }
+                $fresh_validation = self::validate_evidence_payload($evidence, (string) $fresh_listing['category']);
+                if ($fresh_validation) {
+                    return new WP_Error('mkt_evidence_invalid', __('Current category evidence requirements are not met.', 'marketplace'), ['status' => 422, 'errors' => $fresh_validation]);
+                }
+
                 $table = self::table('listing_evidence');
                 $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE listing_public_id=%s FOR UPDATE", $listing_public_id), ARRAY_A);
-                $expected_evidence_version = (int) ($input['expected_evidence_version'] ?? ($row ? (int) $row['version'] : 0));
-                if ($row && $expected_evidence_version !== (int) $row['version']) {
-                    return new WP_Error('mkt_stale_evidence_version', __('The evidence record changed. Reload and try again.', 'marketplace'), ['status' => 409, 'current_version' => (int) $row['version']]);
+                // An omitted evidence version is NOT permission to silently
+                // overwrite the latest approved/pending reviewer decision.
+                $expected_evidence_version = array_key_exists('expected_evidence_version', $input)
+                    && filter_var($input['expected_evidence_version'], FILTER_VALIDATE_INT) !== false
+                    ? (int) $input['expected_evidence_version'] : -1;
+                $current_evidence_version = $row ? (int) $row['version'] : 0;
+                if ($expected_evidence_version !== $current_evidence_version) {
+                    return new WP_Error('mkt_stale_evidence_version', __('The evidence changed or its expected version is missing.', 'marketplace'), ['status' => 409, 'current_version' => $current_evidence_version]);
                 }
                 $listing_updated = $wpdb->update(MKT_DB::table('listings'), [
                     'updated_at' => MKT_DB::now(),
                     'updated_by' => $actor_id,
                     'version' => $expected_listing_version + 1,
-                ], ['id' => (int) $listing['id'], 'version' => $expected_listing_version]);
+                ], ['id' => (int) $fresh_listing['id'], 'version' => $expected_listing_version, 'status' => (string) $fresh_listing['status']]);
                 if ($listing_updated !== 1) {
                     return new WP_Error('mkt_stale_version', __('The listing changed. Reload and try again.', 'marketplace'), ['status' => 409]);
                 }
@@ -351,8 +378,14 @@ final class MKT_Governance {
                     'seller_user_id' => $actor_id,
                     'safe_summary' => __('Structured listing evidence was updated and requires review.', 'marketplace'),
                 ], 'restricted');
-                MKT_Audit::record('listing_evidence_saved', 'listing', $listing_public_id, ['category' => $listing['category']], 'success', '', 'marketplace_evidence');
-                return self::evidence_record($listing_public_id, true);
+                MKT_Audit::record('listing_evidence_saved', 'listing', $listing_public_id, ['category' => $fresh_listing['category']], 'success', '', 'marketplace_evidence');
+                $confirmed = self::evidence_record($listing_public_id, true);
+                $new_version = $row ? (int) $row['version'] + 1 : 1;
+                if (!$confirmed || (int) ($confirmed['version'] ?? 0) !== $new_version
+                    || (string) ($confirmed['status'] ?? '') !== 'pending') {
+                    return new WP_Error('mkt_evidence_readback_failed', __('Updated evidence could not be verified; the save was rolled back.', 'marketplace'), ['status' => 503]);
+                }
+                return $confirmed;
             });
         } catch (Throwable $e) {
             return new WP_Error('mkt_evidence_save_failed', __('The evidence could not be saved safely.', 'marketplace'), ['status' => 500, 'trace_id' => MKT_Audit::trace_id()]);
@@ -436,7 +469,12 @@ final class MKT_Governance {
                 MKT_Audit::record('listing_evidence_reviewed', 'listing', $listing_public_id, [
                     'decision' => $decision, 'self_review_prevented' => true, 'listing_paused' => $paused,
                 ], 'success', '', 'marketplace_evidence');
-                return self::evidence_record($listing_public_id, true);
+                $confirmed = self::evidence_record($listing_public_id, true);
+                if (!$confirmed || (int) ($confirmed['version'] ?? 0) !== (int) $row['version'] + 1
+                    || (string) ($confirmed['status'] ?? '') !== $decision) {
+                    return new WP_Error('mkt_evidence_readback_failed', __('Reviewed evidence could not be verified; the decision was rolled back.', 'marketplace'), ['status' => 503]);
+                }
+                return $confirmed;
             });
         } catch (Throwable $e) {
             return new WP_Error('mkt_evidence_review_failed', __('The evidence review could not be saved safely.', 'marketplace'), ['status' => 500, 'trace_id' => MKT_Audit::trace_id()]);
@@ -706,7 +744,12 @@ final class MKT_Governance {
                     'url' => MKT_Listings::url($listing),
                 ], 'restricted');
                 MKT_Audit::record('recall_' . $to, 'listing', (string) $row['listing_public_id'], ['recall_public_id' => $public_id, 'batch_ref' => $row['batch_ref']], 'success', '', 'marketplace_safety');
-                return self::recall_record($public_id);
+                $confirmed = self::recall_record($public_id);
+                if (!$confirmed || (int) ($confirmed['version'] ?? 0) !== (int) $row['version'] + 1
+                    || (string) ($confirmed['status'] ?? '') !== $to) {
+                    return new WP_Error('mkt_recall_readback_failed', __('The recall transition could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+                }
+                return $confirmed;
             });
         } catch (Throwable $e) {
             return new WP_Error('mkt_recall_transition_failed', __('Recall action could not be completed safely.', 'marketplace'), ['status' => 500, 'trace_id' => MKT_Audit::trace_id()]);
