@@ -2,156 +2,162 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo '[1/49] PHP syntax'
+echo '[1/51] PHP syntax'
 while IFS= read -r -d '' file; do php -l "$file" >/dev/null; done < <(find "$ROOT" -type f -name '*.php' -print0)
 
-echo '[2/49] JavaScript syntax'
+echo '[2/51] JavaScript syntax'
 node --check "$ROOT/assets/js/marketplace.js"
 node --check "$ROOT/assets/js/marketplace-completion.js"
 
-echo '[3/49] CSS structural balance'
+echo '[3/51] CSS structural balance'
 python3 -c "import pathlib; s=pathlib.Path('$ROOT/assets/css/marketplace.css').read_text(); assert s.count('{')==s.count('}'); print('PASS: CSS braces balanced')"
 
-echo '[4/49] State machines'
+echo '[4/51] State machines'
 php "$ROOT/tests/test-state-machines.php"
 
-echo '[5/49] Contract invariants'
+echo '[5/51] Contract invariants'
 php "$ROOT/tests/test-contracts.php"
 
-echo '[6/49] Source architecture'
+echo '[6/51] Source architecture'
 php "$ROOT/tests/test-source-architecture.php"
 
-echo '[7/49] Adversarial invariants'
+echo '[7/51] Adversarial invariants'
 php "$ROOT/tests/test-review-invariants.php"
 
-echo '[8/49] October forty-scope corrective regressions'
+echo '[8/51] October forty-scope corrective regressions'
 php "$ROOT/tests/test-october-40-scope-regressions.php"
 
-echo '[9/49] File 19 native notification contract'
+echo '[9/51] File 19 native notification contract'
 php "$ROOT/tests/test-file19-notification-contract.php"
 
-echo '[10/49] Safety report transactional fault-injection'
+echo '[10/51] Safety report transactional fault-injection'
 php "$ROOT/tests/test-report-atomicity.php"
 
-echo '[11/49] Audit transaction and lock lifetime regressions'
+echo '[11/51] Audit transaction and lock lifetime regressions'
 php "$ROOT/tests/test-audit-transaction-lock.php"
 
-echo '[12/49] File19 outbox required notification acknowledgement'
+echo '[12/51] File19 outbox required notification acknowledgement'
 php "$ROOT/tests/test-outbox-required-notification-ack.php"
 
-echo '[13/49] Price and stock strict domain validation'
+echo '[13/51] Price and stock strict domain validation'
 php "$ROOT/tests/test-money-stock-validation.php"
 
-echo '[14/49] File 17 native conversation/context boundary'
+echo '[14/51] File 17 native conversation/context boundary'
 php "$ROOT/tests/test-file17-native-context-bridge.php"
 
-echo '[15/49] Idempotency durable receipt fault injection'
+echo '[15/51] Idempotency durable receipt fault injection'
 php "$ROOT/tests/test-idempotency-durable-receipt.php"
 
-echo '[16/49] Inbox crash/retry regression'
+echo '[16/51] Inbox crash/retry regression'
 php "$ROOT/tests/test-inbox-crash-recovery.php"
 
-echo '[17/49] File10 media transaction fault injection'
+echo '[17/51] File10 media transaction fault injection'
 php "$ROOT/tests/test-media-atomicity.php"
 
-echo '[18/49] Recall and legal hold transaction fault injection'
+echo '[18/51] Recall and legal hold transaction fault injection'
 php "$ROOT/tests/test-governance-recall-hold-atomicity.php"
 
-echo '[19/49] Seller identity and audit atomicity regression'
+echo '[19/51] Seller identity and audit atomicity regression'
 php "$ROOT/tests/test-seller-atomicity.php"
 
-echo '[20/49] Forty plan-owner source anchors'
+echo '[20/51] Forty plan-owner source anchors'
 php "$ROOT/tests/test-seventh-40-plan-anchors.php"
 
-echo '[21/49] Privacy legal-hold and DB-write fail-closed regression'
+echo '[21/51] Privacy legal-hold and DB-write fail-closed regression'
 php "$ROOT/tests/test-privacy-hold-failclosed.php"
 
-echo '[22/49] Governance deployed schema and migration truth'
+echo '[22/51] Governance deployed schema and migration truth'
 php "$ROOT/tests/test-governance-schema-truth.php"
 
-echo '[23/49] File18 core schema truth and drift'
+echo '[23/51] File18 core schema truth and drift'
 php "$ROOT/tests/test-core-schema-truth.php"
 
-echo '[24/49] File17 standalone legacy handoff migration'
+echo '[24/51] File17 standalone legacy handoff migration'
 php "$ROOT/tests/test-file17-legacy-only-migration.php"
 
-echo '[25/49] Conditional CF05 source-of-truth boundary'
+echo '[25/51] Conditional CF05 source-of-truth boundary'
 php "$ROOT/tests/test-cf05-conditional-boundary.php"
 
-echo '[26/49] Privacy export SQL source completeness'
+echo '[26/51] Privacy export SQL source completeness'
 php "$ROOT/tests/test-privacy-export-completeness.php"
 
-echo '[27/49] File00 explicit identity denial'
+echo '[27/51] File00 explicit identity denial'
 php "$ROOT/tests/test-file00-explicit-identity-denial.php"
 
-echo '[28/49] Native File00 SMC_Contracts marketplace permission bridge'
+echo '[28/51] Native File00 SMC_Contracts marketplace permission bridge'
 php "$ROOT/tests/test-file00-native-marketplace-contract.php"
 
-echo '[29/49] SQL failure / media rights / REST 503 regression'
+echo '[29/51] SQL failure / media rights / REST 503 regression'
 php "$ROOT/tests/test-search-media-sql-failure.php"
 
-echo '[30/49] CF06 conditional localization owner boundary'
+echo '[30/51] CF06 conditional localization owner boundary'
 php "$ROOT/tests/test-cf06-conditional-boundary.php"
 
-echo '[31/49] Legal holds / immutable audit chain retention negative cases'
+echo '[31/51] Legal holds / immutable audit chain retention negative cases'
 php "$ROOT/tests/test-retention-chain-hold-failclosed.php"
 
-echo '[32/49] CF05 safe operational metric aggregate fault injection'
+echo '[32/51] CF05 safe operational metric aggregate fault injection'
 php "$ROOT/tests/test-derived-metrics-failclosed.php"
 
-echo '[33/49] Seller suspension must rollback when listings cannot pause'
+echo '[33/51] Seller suspension must rollback when listings cannot pause'
 php "$ROOT/tests/test-maintenance-seller-pause-rollback.php"
 
-echo '[34/49] Expiry on public, offer and deal flows; SQL fail-closed regression'
+echo '[34/51] Expiry on public, offer and deal flows; SQL fail-closed regression'
 php "$ROOT/tests/test-expiry-commerce-integrity.php"
 
-echo '[35/49] Dashboard and Seller Studio SQL failure regression'
+echo '[35/51] Dashboard and Seller Studio SQL failure regression'
 php "$ROOT/tests/test-dashboard-studio-sql-failclosed.php"
 
-echo '[36/49] Recall owner SQL and public takedown safety regression'
+echo '[36/51] Recall owner SQL and public takedown safety regression'
 php "$ROOT/tests/test-rc17-recall-safety-failclosed.php"
 
-echo '[37/49] Canonical prohibited policy and failed seed regression'
+echo '[37/51] Canonical prohibited policy and failed seed regression'
 php "$ROOT/tests/test-rc17-policy-failclosed.php"
 
-echo '[38/49] Core owner submission and moderator publication invariant regression'
+echo '[38/51] Core owner submission and moderator publication invariant regression'
 php "$ROOT/tests/test-rc18-core-publication-gates.php"
 
-echo '[39/49] Facet schema version, columns and primary-key truth'
+echo '[39/51] Facet schema version, columns and primary-key truth'
 php "$ROOT/tests/test-rc18-facet-schema-truth.php"
 
-echo '[40/49] Atomic policy upgrade failure and newer owner version'
+echo '[40/51] Atomic policy upgrade failure and newer owner version'
 php "$ROOT/tests/test-rc19-policy-seeding-rollback.php"
 
-echo '[41/49] Immutable safety/medical and zero-commission policy floor'
+echo '[41/51] Immutable safety/medical and zero-commission policy floor'
 php "$ROOT/tests/test-rc19-immutable-policy-floor.php"
 
-echo '[42/49] Transactional recall guards on new offers, counters, deal acceptance'
+echo '[42/51] Transactional recall guards on new offers, counters, deal acceptance'
 php "$ROOT/tests/test-rc20-transactional-recall-commitments.php"
 
-echo '[43/49] Actual staging readiness and DB schema failure negative cases'
+echo '[43/51] Actual staging readiness and DB schema failure negative cases'
 php "$ROOT/tests/test-rc20-readiness-schema-truth.php"
 
-echo '[44/49] File00 deal cancel/dispute scope and direct deal audit rollback'
+echo '[44/51] File00 deal cancel/dispute scope and direct deal audit rollback'
 php "$ROOT/tests/test-rc21-deal-auth-audit-atomicity.php"
 
-echo '[45/49] Direct listing/report/dispute owner audit atomicity'
+echo '[45/51] Direct listing/report/dispute owner audit atomicity'
 php "$ROOT/tests/test-rc21-direct-owner-atomicity.php"
 
-echo '[46/49] Required documentation and assets'
+echo '[46/51] Durable idempotency unknown callback outcome cannot be replayed'
+php "$ROOT/tests/test-rc22-idempotency-exception-uncertainty.php"
+
+echo '[47/51] Reused offer/counter key must match exact stored payload'
+php "$ROOT/tests/test-rc22-offer-payload-idempotency.php"
+
+echo '[48/51] Required documentation and assets'
 for f in marketplace.php uninstall.php readme.txt README.md CHANGELOG.md assets/css/marketplace.css assets/js/marketplace.js assets/js/marketplace-completion.js includes/class-mkt-governance.php includes/class-mkt-plan-completion.php includes/class-mkt-finalization.php includes/class-mkt-release-gates.php docs/REQUIREMENTS-TRACEABILITY.md docs/STAGING-ACCEPTANCE.md docs/FOUR-ROUND-GOVERNING-PLAN-AUDIT.md; do test -s "$ROOT/$f"; done
 
-echo '[47/49] Forbidden artifact scan'
+echo '[49/51] Forbidden artifact scan'
 ! grep -RInE --exclude-dir=tests --exclude='*.md' --exclude='readme.txt' '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,})' "$ROOT"
 ! grep -RInE --include='*.php' 'CREATE TABLE.*(conversation|messages|calls|wallet|escrow|payout)' "$ROOT/includes"
 ! grep -RInE --include='*.php' '\b(eval|exec|shell_exec|passthru|system)[[:space:]]*\(' "$ROOT"
 
-echo '[48/49] Release identity'
+echo '[50/51] Release identity'
 grep -q 'Version: 2.1.0' "$ROOT/marketplace.php"
 grep -q "define('MKT_VERSION', '2.1.0')" "$ROOT/marketplace.php"
 grep -q 'Stable tag: 2.1.0' "$ROOT/readme.txt"
 grep -q '0% platform commission' "$ROOT/readme.txt"
 
-echo '[49/49] Four-plan governing invariants'
+echo '[51/51] Four-plan governing invariants'
 php "$ROOT/tests/test-four-plan-invariants.php"
 echo 'ALL STATIC AND CONTRACT TESTS PASSED'
