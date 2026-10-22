@@ -744,7 +744,12 @@ final class MKT_Governance {
                     'url' => MKT_Listings::url($listing),
                 ], 'restricted');
                 MKT_Audit::record('recall_' . $to, 'listing', (string) $row['listing_public_id'], ['recall_public_id' => $public_id, 'batch_ref' => $row['batch_ref']], 'success', '', 'marketplace_safety');
-                return self::recall_record($public_id);
+                $confirmed = self::recall_record($public_id);
+                if (!$confirmed || (int) ($confirmed['version'] ?? 0) !== (int) $row['version'] + 1
+                    || (string) ($confirmed['status'] ?? '') !== $to) {
+                    return new WP_Error('mkt_recall_readback_failed', __('The recall transition could not be verified and was rolled back.', 'marketplace'), ['status' => 503]);
+                }
+                return $confirmed;
             });
         } catch (Throwable $e) {
             return new WP_Error('mkt_recall_transition_failed', __('Recall action could not be completed safely.', 'marketplace'), ['status' => 500, 'trace_id' => MKT_Audit::trace_id()]);
