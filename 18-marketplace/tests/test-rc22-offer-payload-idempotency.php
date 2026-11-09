@@ -12,6 +12,12 @@ final class MKT_DB {
  public static function table(string $n):string{return 'wp_mkt_'.$n;}
  public static function transaction(callable $c){return $c();}
 }
+// This isolation test loads Commerce without the production audit bootstrap.
+// The audit chain's actual SQL/locking behavior is tested in separate suites.
+// The deterministic trace stub prevents catch-path diagnostics from fatalling.
+final class MKT_Audit {
+ public static function trace_id():string{return 'rc22-idempotency-test-trace';}
+}
 final class MKT_Auth {
  public static function can(string $cap,array $ctx=[]):bool|WP_Error{return true;}
 }
