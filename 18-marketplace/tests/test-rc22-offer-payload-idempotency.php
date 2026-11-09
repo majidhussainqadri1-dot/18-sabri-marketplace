@@ -38,7 +38,16 @@ final class ReplayCollisionDB {
   'updated_at'=>'2026-10-21 12:00:00','expires_at'=>'2026-10-23 12:00:00'
  ];
  public array $parent=[];
- public function __construct(){ $this->parent=$this->existing;$this->parent['public_id']='offer-parent';$this->parent['id']=10; }
+ public function __construct(){
+  // The original October 2026 fixture expiry is now in the past. Preserve a
+  // real 48-hour offer duration relative to execution so this test exercises
+  // counter-offer replay rather than the unrelated expiry transition.
+  $created=gmdate('Y-m-d H:i:s',time()-60);
+  $this->existing['created_at']=$created;
+  $this->existing['updated_at']=$created;
+  $this->existing['expires_at']=gmdate('Y-m-d H:i:s',time()-60+48*HOUR_IN_SECONDS);
+  $this->parent=$this->existing;$this->parent['public_id']='offer-parent';$this->parent['id']=10;
+ }
  public function prepare(string $sql,...$args):string{return vsprintf(str_replace(['%s','%d'],["'%s'",'%d'],$sql),$args);}
  public function get_row(string $sql,$type):?array{
    if(str_contains($sql,"WHERE public_id='offer-parent'"))return $this->parent;
