@@ -185,6 +185,8 @@ jobs:
         run: php 18-marketplace/tests/test-rc35-file26-event-receipt.php
       - name: File26 bounded owner reconciliation checkpoint and retry regression
         run: php 18-marketplace/tests/test-rc36-file26-owner-reconcile.php
+      - name: WordPress Urdu and Arabic PHP translation catalogs / RTL regression
+        run: php 18-marketplace/tests/test-rc37-localization.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes

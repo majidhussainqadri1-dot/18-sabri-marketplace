@@ -4,6 +4,7 @@
   const qs = (selector, root = document) => root.querySelector(selector);
   const qsa = (selector, root = document) => [...root.querySelectorAll(selector)];
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const tr = (key, fallback) => String(app.strings?.[key] || fallback);
   // Reject unsafe/external listing destinations before interpolating a link into HTML.
   function safeListingUrl(value) {
     if (typeof value !== 'string' || !value.trim()) return '';
@@ -116,14 +117,14 @@
     qs('[data-mkt-offer-form]')?.addEventListener('submit', async event => {
       event.preventDefault(); const form = event.currentTarget, button = qs('button[type=submit]', form); buttonBusy(button, true);
       const payload = objectFromForm(form), key = offerRequestKey(form, payload);
-      try { await api(`listings/${listingId}/offers`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(payload) }); pendingOffers.delete(form); closeModal(form.closest('.mkt-modal')); form.reset(); toast('Offer submitted.'); }
+      try { await api(`listings/${listingId}/offers`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(payload) }); pendingOffers.delete(form); closeModal(form.closest('.mkt-modal')); form.reset(); toast(tr('offerSubmitted', 'Offer submitted.')); }
       catch (error) { toast(error.message, 'error'); }
       finally { buttonBusy(button, false); }
     });
     qs('[data-mkt-report-form]')?.addEventListener('submit', async event => {
       event.preventDefault(); const form = event.currentTarget, button = qs('button[type=submit]', form); buttonBusy(button, true);
       const payload = { ...objectFromForm(form), target_type: 'listing', target_public_id: listingId };
-      try { await api('reports', { method: 'POST', body: JSON.stringify(payload) }); closeModal(form.closest('.mkt-modal')); form.reset(); toast('Report submitted for review.'); }
+      try { await api('reports', { method: 'POST', body: JSON.stringify(payload) }); closeModal(form.closest('.mkt-modal')); form.reset(); toast(tr('reportSubmitted', 'Report submitted for review.')); }
       catch (error) { toast(error.message, 'error'); }
       finally { buttonBusy(button, false); }
     });
@@ -131,8 +132,8 @@
 
   qs('[data-mkt-share]')?.addEventListener('click', async event => {
     const url = event.currentTarget.dataset.shareUrl || location.href;
-    try { if (navigator.share) await navigator.share({ url, title: document.title }); else { await navigator.clipboard.writeText(url); toast('Link copied.'); } }
-    catch (error) { if (error.name !== 'AbortError') toast('The link could not be shared.', 'error'); }
+    try { if (navigator.share) await navigator.share({ url, title: document.title }); else { await navigator.clipboard.writeText(url); toast(tr('linkCopied', 'Link copied.')); } }
+    catch (error) { if (error.name !== 'AbortError') toast(tr('shareFailed', 'The link could not be shared.'), 'error'); }
   });
 
   const listingForm = qs('[data-mkt-listing-form]');
@@ -153,7 +154,7 @@
         if (mediaProviderId) {
           await api(`listings/${listing.public_id}/media`, { method: 'POST', body: JSON.stringify({ provider: 'central-media', provider_public_id: mediaProviderId, public_id: mediaProviderId, alt_text: mediaAltText }) });
         }
-        toast(listingId ? 'Draft saved.' : 'Draft created.');
+        toast(listingId ? tr('draftSaved', 'Draft saved.') : tr('draftCreated', 'Draft created.'));
         await sleep(500);
         window.location.assign(`${location.origin}/marketplace/sell/?id=${encodeURIComponent(listing.public_id)}`);
       } catch (error) {
@@ -166,15 +167,15 @@
       buttonBusy(button, true);
       try {
         const updated = await api(`listings/${listingId}/submit`, { method: 'POST', body: JSON.stringify({ version: Number(listingForm.dataset.listingVersion || 0) }) });
-        listingForm.dataset.listingVersion = String(updated.version); toast('Listing submitted for review.'); await sleep(500); window.location.assign(`${location.origin}/marketplace/dashboard/?tab=listings`);
+        listingForm.dataset.listingVersion = String(updated.version); toast(tr('listingSubmitted', 'Listing submitted for review.')); await sleep(500); window.location.assign(`${location.origin}/marketplace/dashboard/?tab=listings`);
       } catch (error) { toast(error.message, 'error'); }
       finally { buttonBusy(button, false); }
     });
     qsa('[data-mkt-remove-media]', listingForm).forEach(button => button.addEventListener('click', async () => {
       const mediaId = button.dataset.mktRemoveMedia, listingId = listingForm.dataset.listingId; if (!listingId || !mediaId) return;
-      if (!confirm('Remove this media reference?')) return;
+      if (!confirm(tr('removeMediaConfirm', 'Remove this media reference?'))) return;
       buttonBusy(button, true);
-      try { await api(`listings/${listingId}/media/${mediaId}`, { method: 'DELETE' }); button.closest('li')?.remove(); toast('Media reference removed.'); }
+      try { await api(`listings/${listingId}/media/${mediaId}`, { method: 'DELETE' }); button.closest('li')?.remove(); toast(tr('mediaRemoved', 'Media reference removed.')); }
       catch (error) { toast(error.message, 'error'); buttonBusy(button, false); }
     }));
   }
@@ -190,7 +191,7 @@
     buttonBusy(button, true);
     try {
       const updated = await api(`listings/${row.dataset.listingId}/transition`, { method: 'POST', body: JSON.stringify({ to, version: Number(row.dataset.listingVersion), reason: 'seller_action' }) });
-      row.dataset.listingVersion = String(updated.version); qs('.mkt-status', row).textContent = updated.status.replaceAll('_',' '); toast('Listing updated.'); location.reload();
+      row.dataset.listingVersion = String(updated.version); qs('.mkt-status', row).textContent = updated.status.replaceAll('_',' '); toast(tr('listingUpdated', 'Listing updated.')); location.reload();
     } catch (error) { toast(error.message, 'error'); }
     finally { buttonBusy(button, false); }
   })));
@@ -198,33 +199,33 @@
   qsa('[data-mkt-offer-row]').forEach(row => qsa('[data-mkt-offer-action]', row).forEach(button => button.addEventListener('click', async () => {
     const to = button.dataset.mktOfferAction, payload = { to, version: Number(row.dataset.offerVersion) };
     if (to === 'countered') {
-      const amount = prompt('Enter the counter-offer amount.'); if (amount === null) return;
-      payload.amount = Number(amount); payload.terms = prompt('Optional counter-offer terms.') || '';
+      const amount = prompt(tr('counterAmount', 'Enter the counter-offer amount.')); if (amount === null) return;
+      payload.amount = Number(amount); payload.terms = prompt(tr('counterTerms', 'Optional counter-offer terms.')) || '';
     } else if (!confirm(`Change offer status to ${to}?`)) return;
     buttonBusy(button, true);
     try {
       const result = await api(`offers/${row.dataset.offerId}/transition`, { method: 'POST', headers: { 'Idempotency-Key': idempotency(`offer-${to}`) }, body: JSON.stringify(payload) });
       const updated = result.offer || result;
-      row.dataset.offerVersion = String(updated.version); qs('.mkt-status', row).textContent = updated.status.replaceAll('_',' '); toast('Offer updated.'); location.reload();
+      row.dataset.offerVersion = String(updated.version); qs('.mkt-status', row).textContent = updated.status.replaceAll('_',' '); toast(tr('offerUpdated', 'Offer updated.')); location.reload();
     } catch (error) { toast(error.message, 'error'); }
     finally { buttonBusy(button, false); }
   })));
 
   qsa('[data-mkt-report-row]').forEach(row => qs('[data-mkt-report-appeal]', row)?.addEventListener('click', async event => {
-    const statement = prompt('Explain why this decision should be reviewed.'); if (!statement) return;
+    const statement = prompt(tr('explainReview', 'Explain why this decision should be reviewed.')); if (!statement) return;
     const button = event.currentTarget; buttonBusy(button, true);
-    try { await api(`reports/${row.dataset.reportId}/transition`, { method: 'POST', body: JSON.stringify({ to: 'appealed', version: Number(row.dataset.reportVersion), appeal_statement: statement }) }); toast('Report appeal submitted.'); location.reload(); }
+    try { await api(`reports/${row.dataset.reportId}/transition`, { method: 'POST', body: JSON.stringify({ to: 'appealed', version: Number(row.dataset.reportVersion), appeal_statement: statement }) }); toast(tr('reportAppealSubmitted', 'Report appeal submitted.')); location.reload(); }
     catch (error) { toast(error.message, 'error'); }
     finally { buttonBusy(button, false); }
   }));
 
   qsa('[data-mkt-dispute-row]').forEach(row => qsa('[data-mkt-dispute-action]', row).forEach(button => button.addEventListener('click', async () => {
     const to = button.dataset.mktDisputeAction, payload = { to, version: Number(row.dataset.disputeVersion) };
-    if (to === 'appealed') { const statement = prompt('Explain why the dispute decision should be reviewed.'); if (!statement) return; payload.appeal_statement = statement; }
-    if (to === 'evidence') { const reference = prompt('Enter an approved evidence reference.'); if (!reference) return; payload.evidence_refs = [reference]; }
-    if (to === 'withdrawn' && !confirm('Withdraw this dispute?')) return;
+    if (to === 'appealed') { const statement = prompt(tr('explainDisputeReview', 'Explain why the dispute decision should be reviewed.')); if (!statement) return; payload.appeal_statement = statement; }
+    if (to === 'evidence') { const reference = prompt(tr('approvedEvidenceRef', 'Enter an approved evidence reference.')); if (!reference) return; payload.evidence_refs = [reference]; }
+    if (to === 'withdrawn' && !confirm(tr('withdrawDisputeConfirm', 'Withdraw this dispute?'))) return;
     buttonBusy(button, true);
-    try { await api(`disputes/${row.dataset.disputeId}/transition`, { method: 'POST', body: JSON.stringify(payload) }); toast('Dispute updated.'); location.reload(); }
+    try { await api(`disputes/${row.dataset.disputeId}/transition`, { method: 'POST', body: JSON.stringify(payload) }); toast(tr('disputeUpdated', 'Dispute updated.')); location.reload(); }
     catch (error) { toast(error.message, 'error'); }
     finally { buttonBusy(button, false); }
   })));
@@ -234,14 +235,14 @@
     qsa('[data-mkt-deal-action]', deal).forEach(button => button.addEventListener('click', async () => {
       const to = button.dataset.mktDealAction; if (!confirm(`Change deal status to ${to}?`)) return;
       buttonBusy(button, true);
-      try { const updated = await api(`deals/${deal.dataset.dealId}/transition`, { method: 'POST', body: JSON.stringify({ to, version: Number(deal.dataset.dealVersion) }) }); deal.dataset.dealVersion = updated.version; qs('.mkt-status', deal).textContent = updated.status.replaceAll('_',' '); toast('Deal updated.'); }
+      try { const updated = await api(`deals/${deal.dataset.dealId}/transition`, { method: 'POST', body: JSON.stringify({ to, version: Number(deal.dataset.dealVersion) }) }); deal.dataset.dealVersion = updated.version; qs('.mkt-status', deal).textContent = updated.status.replaceAll('_',' '); toast(tr('dealUpdated', 'Deal updated.')); }
       catch (error) { toast(error.message, 'error'); }
       finally { buttonBusy(button, false); }
     }));
     qs('[data-mkt-dispute]', deal)?.addEventListener('click', () => openModal(qs('[data-mkt-dispute-modal]')));
     qs('[data-mkt-dispute-form]')?.addEventListener('submit', async event => {
       event.preventDefault(); const form = event.currentTarget, button = qs('button[type=submit]', form); buttonBusy(button, true);
-      try { await api(`deals/${deal.dataset.dealId}/disputes`, { method: 'POST', body: JSON.stringify(objectFromForm(form)) }); closeModal(form.closest('.mkt-modal')); toast('Dispute opened.'); location.reload(); }
+      try { await api(`deals/${deal.dataset.dealId}/disputes`, { method: 'POST', body: JSON.stringify(objectFromForm(form)) }); closeModal(form.closest('.mkt-modal')); toast(tr('disputeOpened', 'Dispute opened.')); location.reload(); }
       catch (error) { toast(error.message, 'error'); }
       finally { buttonBusy(button, false); }
     });
