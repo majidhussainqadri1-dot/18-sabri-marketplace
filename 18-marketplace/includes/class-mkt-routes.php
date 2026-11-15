@@ -135,11 +135,19 @@ final class MKT_Routes {
         if ($route !== 'listing') {
             return;
         }
-        $listing = MKT_Listings::get((string) get_query_var('mkt_object_id'), false);
-        if (!$listing) {
+        global $wpdb;
+        try {
+            $wpdb->last_error = '';
+            $listing = MKT_Listings::get((string) get_query_var('mkt_object_id'), false);
+            if ($wpdb->last_error !== '' || !is_array($listing)) return;
+            $wpdb->last_error = '';
+            $item = MKT_Listings::public_dto($listing);
+            if ($wpdb->last_error !== '' || !is_array($item) || empty($item['url']) || empty($item['public_id'])) return;
+        } catch (Throwable $e) {
+            // A failed media/seller owner read must never take down wp_head
+            // or emit half a canonical/JSON-LD projection.
             return;
         }
-        $item = MKT_Listings::public_dto($listing);
         echo '<link rel="canonical" href="' . esc_url($item['url']) . '">' . "\n";
         $schema = [
             '@context' => 'https://schema.org',
