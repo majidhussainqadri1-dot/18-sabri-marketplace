@@ -21,6 +21,7 @@ class MKT_DB {
  public static function currency(string $x):string{return strtoupper($x);}
 }
 class MKT_Plan_Completion {public static function table():string{return 'wp_mkt_listing_fulfillment';}}
+class MKT_Governance {public static function table(string $name):string{if($name!=='recalls')throw new InvalidArgumentException('Fixture must use the canonical recalls owner.');return 'wp_mkt_recalls';}}
 class SearchMediaDB {
  public string $last_error='';
  public bool $fail_rows=false;
