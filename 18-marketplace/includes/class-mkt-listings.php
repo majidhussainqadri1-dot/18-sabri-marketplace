@@ -603,7 +603,7 @@ final class MKT_Listings {
 
     public static function get(string $public_id, bool $include_private = false): ?array {
         global $wpdb;
-        $where = $include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()" . " AND NOT EXISTS (SELECT 1 FROM " . MKT_DB::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')";
+        $where = $include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()" . " AND NOT EXISTS (SELECT 1 FROM " . MKT_Governance::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')";
         $row = $wpdb->get_row($wpdb->prepare(
             'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . " s ON s.id=l.seller_id WHERE l.public_id=%s {$where} LIMIT 1",
             $public_id
@@ -614,7 +614,7 @@ final class MKT_Listings {
     public static function get_by_id(int $id, bool $include_private = false): ?array {
         global $wpdb;
         $row = $wpdb->get_row($wpdb->prepare(
-            'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d' . ($include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()" . " AND NOT EXISTS (SELECT 1 FROM " . MKT_DB::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')") . ' LIMIT 1',
+            'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d' . ($include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()" . " AND NOT EXISTS (SELECT 1 FROM " . MKT_Governance::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')") . ' LIMIT 1',
             $id
         ), ARRAY_A);
         return $row ?: null;
@@ -637,7 +637,7 @@ final class MKT_Listings {
             $where[] = "l.status='active'";
             $where[] = "s.status='approved'";
             $where[] = 'l.expires_at>UTC_TIMESTAMP()';
-            $where[] = "NOT EXISTS (SELECT 1 FROM " . MKT_DB::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')";
+            $where[] = "NOT EXISTS (SELECT 1 FROM " . MKT_Governance::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')";
         }
         if (!empty($filters['seller_user_id'])) {
             $where[] = 's.user_id=%d'; $params[] = (int) $filters['seller_user_id'];

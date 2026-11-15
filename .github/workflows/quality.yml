@@ -191,6 +191,8 @@ jobs:
         run: php 18-marketplace/tests/test-rc38-recall-privacy-boundary.php
       - name: Deployed manifest / migration marker source-truth regression
         run: php 18-marketplace/tests/test-rc40-deployed-reality.php
+      - name: Public Listing search must use canonical governance recall table
+        run: php 18-marketplace/tests/test-rc42-governance-recall-table-owner.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes

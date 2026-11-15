@@ -36,6 +36,11 @@ assert_wp_marketplace(array_key_exists('archive_sha256', $manifest) && $manifest
 
 $search = MKT_Listings::search(['limit' => 20]);
 assert_wp_marketplace(is_array($search) && !array_key_exists('error', $search) && $search['items'] === [], 'Anonymous-ready empty public search uses real SQL');
+$faceted = MKT_Finalization::search_array(['limit'=>20,'availability'=>'available']);
+assert_wp_marketplace(is_array($faceted) && !array_key_exists('error',$faceted) && $faceted['items'] === [], 'Faceted archive uses governance-owned recall table on real MySQL');
+$nonexistent = '00000000-0000-4000-8000-000000000042';
+assert_wp_marketplace(MKT_Listings::get($nonexistent,false) === null, 'Public listing detail reads the governance recall table safely');
+assert_wp_marketplace(MKT_Listings::get_by_id(987654321,false) === null, 'Public numeric listing lookup reads governance recalls safely');
 assert_wp_marketplace(MKT_Contracts::zero_commission() === 0, 'Zero commission runtime invariant');
 $eligibility = MKT_Auth::seller_eligibility((int)get_current_user_id());
 assert_wp_marketplace(empty($eligibility['eligible']) && in_array('identity_provider_unavailable', $eligibility['reasons'], true), 'No File00 identity means seller actions are fail-closed');
