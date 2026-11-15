@@ -1,0 +1,63 @@
+name: File 18 WordPress 7.0.1 and MySQL 8 Integration Smoke
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  wordpress_mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: wp_marketplace_ci
+          MYSQL_USER: wpci
+          MYSQL_PASSWORD: ci_disposable_password
+          MYSQL_ROOT_PASSWORD: ci_disposable_root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uci -pci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, mbstring, intl, curl, xml, zip
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Build exact source candidate package
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/marketplace-build"
+      - name: Install isolated WordPress 7.0.1 and activate File18
+        shell: bash
+        run: |
+          set -euo pipefail
+          WP_PATH="$RUNNER_TEMP/wordpress"
+          mkdir -p "$WP_PATH/wp-content/plugins"
+          curl -fL --retry 3 --connect-timeout 15 --max-time 120 \
+            https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+            -o "$RUNNER_TEMP/wp-cli.phar"
+          php "$RUNNER_TEMP/wp-cli.phar" --info
+          php "$RUNNER_TEMP/wp-cli.phar" core download --version=7.0.1 --path="$WP_PATH" --allow-root
+          php "$RUNNER_TEMP/wp-cli.phar" config create \
+            --dbname=wp_marketplace_ci --dbuser=wpci --dbpass=ci_disposable_password \
+            --dbhost=127.0.0.1:3306 --path="$WP_PATH" --allow-root
+          php "$RUNNER_TEMP/wp-cli.phar" core install \
+            --url=http://127.0.0.1:8000 --title=Marketplace-CI \
+            --admin_user=ciadmin --admin_password=ci_disposable_admin_password \
+            --admin_email=ci@example.invalid --skip-email --path="$WP_PATH" --allow-root
+          unzip -q "$RUNNER_TEMP/marketplace-build/18-marketplace-2.1.0-RC39.zip" -d "$WP_PATH/wp-content/plugins"
+          php "$RUNNER_TEMP/wp-cli.phar" plugin activate 18-marketplace --path="$WP_PATH" --allow-root
+          php "$RUNNER_TEMP/wp-cli.phar" eval-file \
+            "$GITHUB_WORKSPACE/18-marketplace/tests/wp-real-mysql-smoke.php" \
+            --path="$WP_PATH" --user=ciadmin --allow-root
