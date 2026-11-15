@@ -106,14 +106,21 @@ $r=MKT_File26_Connector::reconcile_batch();
 assert_ok(is_wp_error($r)&&$r->get_error_code()==='file18_file26_reconcile_checkpoint_failed','Cursor persistence failure rejected');
 $GLOBALS['block_options']=false;
 $wpdb->lock_available=false;
+$GLOBALS['scheduled']=false; // cron consumed the single-shot event
+$prior_calls=$GLOBALS['schedule_calls'];
 $r=MKT_File26_Connector::reconcile_batch();
 assert_ok(is_wp_error($r)&&$r->get_error_code()==='file18_file26_reconcile_locked','Concurrent worker denied without touching listing source');
+assert_ok($GLOBALS['schedule_calls']===$prior_calls+1,'Contended one-shot worker schedules its next safe attempt');
 $wpdb->lock_available=true;
 $GLOBALS['options']['mkt_file26_reconcile_cursor']='bad!';
 $r=MKT_File26_Connector::reconcile_batch();
 assert_ok(is_wp_error($r)&&$r->get_error_code()==='file18_file26_reconcile_cursor_invalid','Tampered owner cursor denied');
 $GLOBALS['options']['mkt_file26_reconcile_cursor']='0';
 MKT_DB::$ready=false;
+$GLOBALS['scheduled']=false; // cron event removed before schema check
+$prior_calls=$GLOBALS['schedule_calls'];
 $r=MKT_File26_Connector::reconcile_batch();
 assert_ok(is_wp_error($r)&&$r->get_error_code()==='file18_file26_reconcile_inactive','Schema failure keeps source sweeper disabled');
+assert_ok($GLOBALS['schedule_calls']===$prior_calls+1,'Transient owner migration failure reschedules read-only reconciliation');
+assert_ok($GLOBALS['options']['mkt_file26_reconcile_cursor']==='0','Early schema denial preserves the last valid checkpoint');
 echo 'PASS RC36: '.$checks." bounded owner reconciliation assertions\n";

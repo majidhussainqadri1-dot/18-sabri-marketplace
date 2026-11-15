@@ -120,13 +120,24 @@ final class MKT_File26_Connector {
     }
     public static function reconcile_batch(){
         global $wpdb;
-        if(!self::active()||!self::source_ready())
-            return new WP_Error('file18_file26_reconcile_inactive','The owner search connector or schema is not ready.');
+        if(!self::active())
+            return new WP_Error('file18_file26_reconcile_inactive','The owner search connector is not active.');
+        if(!self::source_ready()){
+            // WP-Cron single events are consumed before their callback executes.
+            // A temporary schema/migration outage must not permanently lose the
+            // next reconciliation attempt in a low-traffic installation.
+            self::maybe_schedule_reconcile();
+            return new WP_Error('file18_file26_reconcile_inactive','The owner search schema is not ready.');
+        }
         $lock='file18:file26:reconcile';
         $wpdb->last_error='';
         $acquired=$wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 0)',$lock));
-        if((string)$acquired!=='1'||$wpdb->last_error!=='')
+        if((string)$acquired!=='1'||$wpdb->last_error!==''){
+            // A contended named lock previously returned before the finally
+            // scheduling guard, silently losing the single-shot worker.
+            self::maybe_schedule_reconcile();
             return new WP_Error('file18_file26_reconcile_locked','Marketplace owner reconciliation is unavailable or busy.');
+        }
         try {
             $raw=get_option('mkt_file26_reconcile_cursor','0');
             $cursor=is_scalar($raw)?(string)$raw:'';
