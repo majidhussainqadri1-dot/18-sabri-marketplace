@@ -76,6 +76,7 @@ final class MKT_Routes {
         wp_localize_script('mkt-marketplace', 'MKT_APP', [
             'restUrl' => esc_url_raw(rest_url(MKT_Contracts::REST_NAMESPACE . '/')),
             'nonce' => wp_create_nonce('wp_rest'),
+            'listingBase' => esc_url_raw(home_url('/marketplace/listing/')),
             'loggedIn' => is_user_logged_in(),
             'loginUrl' => wp_login_url(home_url('/marketplace/')),
             'commissionPercent' => 0,
@@ -84,6 +85,8 @@ final class MKT_Routes {
                 'error' => __('The action could not be completed.', 'marketplace'),
                 'saved' => __('Saved.', 'marketplace'),
                 'confirm' => __('Please confirm this action.', 'marketplace'),
+                'viewListing' => __('View listing', 'marketplace'),
+                'otherCategory' => __('Other', 'marketplace'),
             ],
         ]);
     }

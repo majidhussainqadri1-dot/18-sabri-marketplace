@@ -4,6 +4,19 @@
   const qs = (selector, root = document) => root.querySelector(selector);
   const qsa = (selector, root = document) => [...root.querySelectorAll(selector)];
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  // Reject unsafe/external listing destinations before interpolating a link into HTML.
+  function safeListingUrl(value) {
+    if (typeof value !== 'string' || !value.trim()) return '';
+    try {
+      const target = new URL(value, location.origin);
+      const base = new URL(app.listingBase || '/marketplace/listing/', location.origin);
+      if (!['http:', 'https:'].includes(target.protocol) ||
+          target.origin !== location.origin ||
+          base.origin !== location.origin ||
+          !target.pathname.startsWith(base.pathname)) return '';
+      return target.href;
+    } catch { return ''; }
+  }
   const idempotency = prefix => `${prefix}:${Date.now()}:${crypto.getRandomValues(new Uint32Array(2)).join('-')}`;
 
   async function api(path, options = {}) {
@@ -227,9 +240,16 @@
     try {
       const params = new URLSearchParams(location.search); params.set('cursor', button.dataset.cursor); params.set('limit', '24');
       const result = await api(`listings?${params.toString()}`);
+      if (!Array.isArray(result.items)) throw new Error(app.strings?.error || 'Marketplace response is unavailable.');
       result.items.forEach(item => {
+        if (!item || typeof item !== 'object') return;
+        const href = safeListingUrl(item.url);
+        if (!href) return;
+        const category = String(item.category || app.strings?.otherCategory || 'Other').replaceAll('_', ' ');
+        const sellerName = String(item.seller?.store_name || '');
+        const viewLabel = String(app.strings?.viewListing || 'View listing');
         const article = document.createElement('article'); article.className = 'mkt-card';
-        article.innerHTML = `<a class="mkt-card-media" href="${escapeAttr(item.url)}" tabindex="-1" aria-hidden="true"><span class="mkt-media-placeholder">▧</span></a><div class="mkt-card-body"><div class="mkt-card-meta"><span>${escapeHtml(item.category.replaceAll('_',' '))}</span></div><h3><a href="${escapeAttr(item.url)}">${escapeHtml(item.title)}</a></h3><p class="mkt-price"><bdi>${escapeHtml(item.currency)} ${escapeHtml(item.price)}</bdi></p><p class="mkt-seller">♙ ${escapeHtml(item.seller.store_name)}</p><a class="mkt-button mkt-button-secondary" href="${escapeAttr(item.url)}">View listing →</a></div>`;
+        article.innerHTML = `<a class="mkt-card-media" href="${escapeAttr(href)}" tabindex="-1" aria-hidden="true"><span class="mkt-media-placeholder">▧</span></a><div class="mkt-card-body"><div class="mkt-card-meta"><span>${escapeHtml(category)}</span></div><h3><a href="${escapeAttr(href)}">${escapeHtml(item.title)}</a></h3><p class="mkt-price"><bdi>${escapeHtml(item.currency)} ${escapeHtml(item.price)}</bdi></p><p class="mkt-seller">♙ ${escapeHtml(sellerName)}</p><a class="mkt-button mkt-button-secondary" href="${escapeAttr(href)}">${escapeHtml(viewLabel)}</a></div>`;
         grid.append(article);
       });
       if (result.has_more) { button.dataset.cursor = result.next_cursor; buttonBusy(button, false); } else button.remove();
