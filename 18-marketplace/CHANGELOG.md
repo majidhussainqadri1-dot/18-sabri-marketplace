@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0 RC54 — Unmerged source candidate (not live)
+- Includes candidate RC31–RC53 owner, safety, privacy, localization and QA source hardening.
+- File26 owner event-to-index/tombstone receipts and bounded retry/reconciliation (connector stays **proposed** unless separately activated/approved).
+- Real isolated WordPress 7.0.1/MySQL 8 integration smoke for migrations, actual public listing, approved/rights-clean media, recall, suspension and expiry.
+- Safe public media metadata allowlist, private-field redaction, structured JSON-LD, exact status codes for SQL/owner and parameter failures, strict cursor and money filters, and honest inaccessible-search messaging.
+- Signed immutable audit-chain retention archive (#18), actual deployed source/DB verification (#17), real File26 owner cutover, 37 Hostinger staging checks, independent reviews and Founder approval remain **unverified**.
+- Deterministic package `18-marketplace-2.1.0-RC54.zip`. The internal WordPress plugin version remains 2.1.0. No automatic deployment.
+
 ## 2.1.0 — Four-plan complete corrective candidate
 
 ### Added

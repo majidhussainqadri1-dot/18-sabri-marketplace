@@ -54,17 +54,26 @@ final class MKT_Finalization {
             'limit' => $request->get_param('limit'),
         ]);
         // A database outage is not a successful empty public result.
-        if (($result['error'] ?? '') === 'search_unavailable') {
-            return new WP_REST_Response($result, 503);
-        }
+        $error = (string) ($result['error'] ?? '');
+        if ($error === 'search_unavailable') return new WP_REST_Response($result, 503);
+        if ($error === 'cursor_expired') return new WP_REST_Response($result, 410);
+        if (str_starts_with($error, 'invalid_')) return new WP_REST_Response($result, 400);
         return rest_ensure_response($result);
     }
 
     public static function search_array(array $filters): array {
         global $wpdb;
         $limit = min(50, max(1, (int) ($filters['limit'] ?? 20)));
-        $cursor = max(0, (int) ($filters['cursor'] ?? 0));
-        $where = ["l.status='active'", "s.status='approved'", "l.expires_at>UTC_TIMESTAMP()", "NOT EXISTS (SELECT 1 FROM " . MKT_DB::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')"];
+        $raw_cursor = $filters['cursor'] ?? '';
+        if (!is_int($raw_cursor) && !is_string($raw_cursor)) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_cursor'];
+        }
+        $cursor_value = (string) $raw_cursor;
+        if ($cursor_value !== '' && !preg_match('/^(0|[1-9][0-9]{0,17})$/D', $cursor_value)) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_cursor'];
+        }
+        $cursor = (int) $raw_cursor;
+        $where = ["l.status='active'", "s.status='approved'", "l.expires_at>UTC_TIMESTAMP()", "NOT EXISTS (SELECT 1 FROM " . MKT_Governance::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')"];
         $params = [];
 
         $category = sanitize_key((string) ($filters['category'] ?? ''));
@@ -75,8 +84,20 @@ final class MKT_Finalization {
         if ($city !== '') { $where[] = 'l.location_city=%s'; $params[] = $city; }
         $currency = sanitize_text_field((string) ($filters['currency'] ?? ''));
         if ($currency !== '') { $where[] = 'l.currency=%s'; $params[] = MKT_DB::currency($currency); }
-        if (($filters['price_min'] ?? '') !== '' && $filters['price_min'] !== null) { $where[] = 'l.price>=%f'; $params[] = max(0, (float) $filters['price_min']); }
-        if (($filters['price_max'] ?? '') !== '' && $filters['price_max'] !== null) { $where[] = 'l.price<=%f'; $params[] = max(0, (float) $filters['price_max']); }
+        $bounds = [];
+        foreach (['price_min','price_max'] as $key) {
+            $raw = $filters[$key] ?? null;
+            if ($raw === null || $raw === '') continue;
+            if (!is_numeric($raw) || !is_finite((float)$raw) || (float)$raw < 0 || (float)$raw > 9999999999999999) {
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_price_range'];
+            }
+            $bounds[$key] = (float) $raw;
+        }
+        if (isset($bounds['price_min'],$bounds['price_max']) && $bounds['price_min'] > $bounds['price_max']) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_price_range'];
+        }
+        if (isset($bounds['price_min'])) { $where[] = 'l.price>=%f'; $params[] = $bounds['price_min']; }
+        if (isset($bounds['price_max'])) { $where[] = 'l.price<=%f'; $params[] = $bounds['price_max']; }
 
         $availability = sanitize_key((string) ($filters['availability'] ?? ''));
         if ($availability !== '') {
@@ -138,13 +159,33 @@ final class MKT_Finalization {
         if ($has_more) array_pop($rows);
         $items = [];
         foreach ($rows as $row) {
-            $item = MKT_Listings::public_dto($row);
-            $item['language'] = (string) ($row['marketplace_language'] ?? 'und');
-            if (class_exists('MKT_Governance')) {
-                $item['evidence'] = MKT_Governance::public_evidence((string) $item['public_id']);
-                $item['recall'] = MKT_Governance::public_recall((string) $item['public_id']);
+            try {
+                $wpdb->last_error = '';
+                $item = MKT_Listings::public_dto($row);
+                if (!is_array($item) || empty($item['public_id']) || $wpdb->last_error !== '') {
+                    return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+                }
+                $item['language'] = (string) ($row['marketplace_language'] ?? 'und');
+                if (class_exists('MKT_Governance')) {
+                    // A failed evidence/recall read may look like "no safety
+                    // warning". Never publish a partial supposedly safe page.
+                    $wpdb->last_error = '';
+                    $item['evidence'] = MKT_Governance::public_evidence((string) $item['public_id']);
+                    if ($wpdb->last_error !== '') {
+                        return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+                    }
+                    $wpdb->last_error = '';
+                    $item['recall'] = MKT_Governance::public_recall((string) $item['public_id']);
+                    if ($wpdb->last_error !== '') {
+                        return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+                    }
+                }
+                $items[] = $item;
+            } catch (Throwable $e) {
+                // Media rights and owner-governance failures must be an HTTP 503
+                // via search(), not a partial page or uncaught fatal exception.
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
             }
-            $items[] = $item;
         }
         $next_cursor = $has_more && $rows ? (int) end($rows)['id'] : null;
         return ['items'=>$items, 'next_cursor'=>$next_cursor, 'has_more'=>$has_more];

@@ -93,12 +93,21 @@ final class MKT_Events {
                 $notification_targets = array_values(array_filter($recipient_ids, static fn(int $uid): bool => $uid > 0 && $uid !== (int) ($event['actor_user_id'] ?? 0)));
                 $notification_required = !empty($notification_targets);
                 $notification_ack = $notification_required ? self::send_derived_notifications($event) : false;
-                $domain_ack = $platform_ack || $local_ack;
-                $ok = ($domain_ack || $notification_ack) && (!$notification_required || $notification_ack);
+                // Only a positively delivered File26 owner event, never an
+                // action hook alone, can be a valid additional domain consumer.
+                $owner_ack = apply_filters('mkt_file26_event_acknowledged', false, $event);
+                $domain_ack = $platform_ack || $local_ack || $owner_ack === true;
+                // A required owner consumer must positively ACK; File19/platform ACKs
+                // cannot conceal an unindexed or unrevoked marketplace listing.
+                $required_ack = apply_filters('mkt_required_event_consumers_acknowledged', true, $event);
+                $ok = ($domain_ack || $notification_ack) && (!$notification_required || $notification_ack)
+                    && $required_ack === true;
                 if (!$ok) {
-                    $error = $notification_required && !$notification_ack
-                        ? 'Required File 19 notification intake was not acknowledged.'
-                        : 'No platform, local, or notification consumer acknowledged the event.';
+                    $error = $required_ack !== true
+                        ? 'A required owner event consumer did not acknowledge delivery.'
+                        : ($notification_required && !$notification_ack
+                            ? 'Required File 19 notification intake was not acknowledged.'
+                            : 'No platform, local, or notification consumer acknowledged the event.');
                 }
             } catch (Throwable $e) {
                 $error = mb_substr($e->getMessage(), 0, 240);

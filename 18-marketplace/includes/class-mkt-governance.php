@@ -934,26 +934,54 @@ final class MKT_Governance {
 
     public static function augment_rest_response($response, $server, WP_REST_Request $request) {
         if ($request->get_method() !== 'GET' || !($response instanceof WP_REST_Response)) return $response;
+        if ($response->get_status() >= 400) return $response;
         $route = (string) $request->get_route();
         $data = $response->get_data();
         if (!is_array($data)) return $response;
         if (preg_match('#^/marketplace/v1/listings/[0-9a-fA-F-]{36}$#', $route) && !empty($data['public_id'])) {
-            $data['evidence'] = self::public_evidence((string) $data['public_id']);
-            $data['recall'] = self::public_recall((string) $data['public_id']);
+            try {
+                global $wpdb;
+                $wpdb->last_error = '';
+                $data['evidence'] = self::public_evidence((string) $data['public_id']);
+                if ($wpdb->last_error !== '') return self::public_safety_unavailable();
+                $wpdb->last_error = '';
+                $data['recall'] = self::public_recall((string) $data['public_id']);
+                if ($wpdb->last_error !== '') return self::public_safety_unavailable();
+            } catch (Throwable $e) {
+                return self::public_safety_unavailable();
+            }
             $response->set_data($data);
         } elseif ($route === '/marketplace/v1/listings' && isset($data['items']) && is_array($data['items'])) {
-            foreach ($data['items'] as &$item) {
-                if (!is_array($item) || empty($item['public_id'])) continue;
-                $item['evidence'] = self::public_evidence((string) $item['public_id']);
-                $item['recall'] = self::public_recall((string) $item['public_id']);
+            try {
+                global $wpdb;
+                foreach ($data['items'] as &$item) {
+                    if (!is_array($item) || empty($item['public_id'])) continue;
+                    $wpdb->last_error = '';
+                    $item['evidence'] = self::public_evidence((string) $item['public_id']);
+                    if ($wpdb->last_error !== '') return self::public_safety_unavailable();
+                    $wpdb->last_error = '';
+                    $item['recall'] = self::public_recall((string) $item['public_id']);
+                    if ($wpdb->last_error !== '') return self::public_safety_unavailable();
+                }
+                unset($item);
+            } catch (Throwable $e) {
+                return self::public_safety_unavailable();
             }
-            unset($item);
             $response->set_data($data);
         } elseif ($route === '/marketplace/v1/dashboard') {
             $data['seller_studio'] = self::seller_studio(get_current_user_id());
             $response->set_data($data);
         }
         return $response;
+    }
+
+    private static function public_safety_unavailable(): WP_REST_Response {
+        // No partial listing, seller or safety evidence should escape when the
+        // authoritative medical/recall projection cannot be verified.
+        return new WP_REST_Response([
+            'code'=>'mkt_public_safety_unavailable',
+            'message'=>__('Marketplace safety details are temporarily unavailable.', 'marketplace'),
+        ],503);
     }
 
     public static function assurance_manifest(array $manifest): array {

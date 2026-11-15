@@ -603,7 +603,7 @@ final class MKT_Listings {
 
     public static function get(string $public_id, bool $include_private = false): ?array {
         global $wpdb;
-        $where = $include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()" . " AND NOT EXISTS (SELECT 1 FROM " . MKT_DB::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')";
+        $where = $include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()" . " AND NOT EXISTS (SELECT 1 FROM " . MKT_Governance::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')";
         $row = $wpdb->get_row($wpdb->prepare(
             'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . " s ON s.id=l.seller_id WHERE l.public_id=%s {$where} LIMIT 1",
             $public_id
@@ -614,7 +614,7 @@ final class MKT_Listings {
     public static function get_by_id(int $id, bool $include_private = false): ?array {
         global $wpdb;
         $row = $wpdb->get_row($wpdb->prepare(
-            'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d' . ($include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()" . " AND NOT EXISTS (SELECT 1 FROM " . MKT_DB::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')") . ' LIMIT 1',
+            'SELECT l.*,s.public_id AS seller_public_id,s.user_id AS seller_user_id,s.store_name,s.status AS seller_status,s.public_contact_modes FROM ' . MKT_DB::table('listings') . ' l INNER JOIN ' . MKT_DB::table('sellers') . ' s ON s.id=l.seller_id WHERE l.id=%d' . ($include_private ? '' : " AND l.status='active' AND s.status='approved' AND l.expires_at>UTC_TIMESTAMP()" . " AND NOT EXISTS (SELECT 1 FROM " . MKT_Governance::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')") . ' LIMIT 1',
             $id
         ), ARRAY_A);
         return $row ?: null;
@@ -630,14 +630,22 @@ final class MKT_Listings {
         }
         global $wpdb;
         $limit = min(50, max(1, (int) ($filters['limit'] ?? 20)));
-        $cursor = max(0, (int) ($filters['cursor'] ?? 0));
+        $raw_cursor = $filters['cursor'] ?? '';
+        if (!is_int($raw_cursor) && !is_string($raw_cursor)) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_cursor'];
+        }
+        $cursor_value = (string) $raw_cursor;
+        if ($cursor_value !== '' && !preg_match('/^(0|[1-9][0-9]{0,17})$/D', $cursor_value)) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_cursor'];
+        }
+        $cursor = (int) $raw_cursor;
         $where = [];
         $params = [];
         if (!$private) {
             $where[] = "l.status='active'";
             $where[] = "s.status='approved'";
             $where[] = 'l.expires_at>UTC_TIMESTAMP()';
-            $where[] = "NOT EXISTS (SELECT 1 FROM " . MKT_DB::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')";
+            $where[] = "NOT EXISTS (SELECT 1 FROM " . MKT_Governance::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')";
         }
         if (!empty($filters['seller_user_id'])) {
             $where[] = 's.user_id=%d'; $params[] = (int) $filters['seller_user_id'];
@@ -654,11 +662,23 @@ final class MKT_Listings {
         if (!empty($filters['currency'])) {
             $where[] = 'l.currency=%s'; $params[] = MKT_DB::currency((string) $filters['currency']);
         }
-        if (isset($filters['price_min']) && $filters['price_min'] !== '') {
-            $where[] = 'l.price>=%f'; $params[] = max(0, (float) $filters['price_min']);
+        $bounds = [];
+        foreach (['price_min','price_max'] as $key) {
+            $raw = $filters[$key] ?? null;
+            if ($raw === null || $raw === '') continue;
+            if (!is_numeric($raw) || !is_finite((float)$raw) || (float)$raw < 0 || (float)$raw > 9999999999999999) {
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_price_range'];
+            }
+            $bounds[$key] = (float) $raw;
         }
-        if (isset($filters['price_max']) && $filters['price_max'] !== '') {
-            $where[] = 'l.price<=%f'; $params[] = max(0, (float) $filters['price_max']);
+        if (isset($bounds['price_min'],$bounds['price_max']) && $bounds['price_min'] > $bounds['price_max']) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_price_range'];
+        }
+        if (isset($bounds['price_min'])) {
+            $where[] = 'l.price>=%f'; $params[] = $bounds['price_min'];
+        }
+        if (isset($bounds['price_max'])) {
+            $where[] = 'l.price<=%f'; $params[] = $bounds['price_max'];
         }
         if (!empty($filters['q'])) {
             $like = '%' . $wpdb->esc_like(sanitize_text_field((string) $filters['q'])) . '%';
@@ -697,7 +717,21 @@ final class MKT_Listings {
         if ($has_more) {
             array_pop($rows);
         }
-        $items = array_map($private ? [self::class, 'private_dto'] : [self::class, 'public_dto'], $rows);
+        $items = [];
+        foreach ($rows as $row) {
+            try {
+                $wpdb->last_error = '';
+                $item = $private ? self::private_dto($row) : self::public_dto($row);
+                if (!is_array($item) || empty($item['public_id']) || $wpdb->last_error !== '') {
+                    return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+                }
+                $items[] = $item;
+            } catch (Throwable $e) {
+                // A failed File10 media rights query must not turn a search
+                // page into either a fatal error or a partly trusted response.
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+            }
+        }
         $next_cursor = $has_more && $rows ? (int) end($rows)['id'] : null;
         return ['items' => $items, 'next_cursor' => $next_cursor, 'has_more' => $has_more];
     }
@@ -755,8 +789,35 @@ final class MKT_Listings {
         if (!is_array($rows) || $wpdb->last_error !== '') {
             throw new RuntimeException('Marketplace media evidence is unavailable.');
         }
-        return array_map(static function(array $row): array {
-            $row['metadata'] = json_decode((string) $row['metadata_json'], true) ?: [];
+        return array_map(static function(array $row) use ($public_only): array {
+            $raw = json_decode((string) $row['metadata_json'], true);
+            $raw = is_array($raw) ? $raw : [];
+            if ($public_only) {
+                // Media-owner metadata can contain EXIF GPS, patient identifiers,
+                // scanner details or internal provider tokens. A public listing
+                // needs only safe presentation URLs and bounded dimensions.
+                $public = [];
+                foreach (['url','thumbnail_url'] as $key) {
+                    $value = $raw[$key] ?? null;
+                    if (!is_string($value)) continue;
+                    $url = esc_url_raw($value);
+                    $scheme = strtolower((string) wp_parse_url($url, PHP_URL_SCHEME));
+                    if ($url !== '' && in_array($scheme, ['http','https'], true)) {
+                        $public[$key] = $url;
+                    }
+                }
+                foreach (['width','height'] as $key) {
+                    $value = $raw[$key] ?? null;
+                    if (is_numeric($value) && (int) $value >= 1 && (int) $value <= 20000) {
+                        $public[$key] = (int) $value;
+                    }
+                }
+                $row['metadata'] = $public;
+            } else {
+                // Seller-owned private draft workspace may need owner metadata;
+                // it is separately guarded by authenticated seller ownership.
+                $row['metadata'] = $raw;
+            }
             unset($row['metadata_json']);
             return $row;
         }, $rows);

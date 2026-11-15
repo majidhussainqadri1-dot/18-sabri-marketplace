@@ -1,0 +1,6 @@
+# RC46: real WordPress/MySQL public-commerce privacy and recall smoke
+Date: 15 Nov 2026. Added only in disposable GitHub Actions WordPress 7.0.1/MySQL 8 environment.
+
+Beyond the prior empty-table smoke, create a direct-fixture approved seller, published book listing and approved/clean central-media reference in real MySQL, deliberately including sensitive EXIF GPS, patient ID and provider token in source metadata. Verify only safe public URL and dimensions survive. Verify real public SQL core/faceted listing search, activate governance-owned recall and prove immediate exclusion, resolve recall, suspend seller and prove exclusion, expire listing and prove exclusion. These are read-policy integration tests; they never bypass the real File00 owner authorization on protected API mutation paths.
+
+The SQL fixtures exist ONLY in disposable CI; not in live/staging. The test does not claim File26 actual indexing or user identity/cross-plugin integration. Still must pass the WordPress/MySQL Actions workflow and independent review.

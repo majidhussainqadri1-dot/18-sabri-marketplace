@@ -173,10 +173,43 @@ jobs:
         run: php 18-marketplace/tests/test-rc27-commerce-final-readback.php
       - name: RC28 Listing direct owner atomic and final readback regression
         run: php 18-marketplace/tests/test-rc28-listing-atomic-receipts.php
+      - name: File26 owner Safe Mode/SQL-failure regression
+        run: php 18-marketplace/tests/test-rc31-file26-public-source.php
+      - name: Client listing card safe URL and malformed response regression
+        run: node 18-marketplace/tests/test-rc32-client-listing-card.mjs
+      - name: Structured JSON-LD seller text cannot escape script node
+        run: php 18-marketplace/tests/test-rc33-structured-data-boundary.php
+      - name: Browser offer retry idempotency and saved UI state regression
+        run: node 18-marketplace/tests/test-rc34-client-offer-retry.mjs
+      - name: File26 owner event receipt, upsert and tombstone regression
+        run: php 18-marketplace/tests/test-rc35-file26-event-receipt.php
+      - name: File26 bounded owner reconciliation checkpoint and retry regression
+        run: php 18-marketplace/tests/test-rc36-file26-owner-reconcile.php
+      - name: WordPress Urdu and Arabic PHP translation catalogs / RTL regression
+        run: php 18-marketplace/tests/test-rc37-localization.php
+      - name: Recall notice cannot republish a private listing
+        run: php 18-marketplace/tests/test-rc38-recall-privacy-boundary.php
+      - name: Deployed manifest / migration marker source-truth regression
+        run: php 18-marketplace/tests/test-rc40-deployed-reality.php
+      - name: Public Listing search must use canonical governance recall table
+        run: php 18-marketplace/tests/test-rc42-governance-recall-table-owner.php
+      - name: Public search media and governance projection SQL failure regression
+        run: php 18-marketplace/tests/test-rc44-public-search-projection-failclosed.php
+      - name: Public Marketplace media metadata redaction and rights regression
+        run: php 18-marketplace/tests/test-rc45-public-media-metadata.php
+      - name: Strict public cursor and HTTP 400 / 410 regression
+        run: php 18-marketplace/tests/test-rc47-public-cursor-validation.php
+      - name: Canonical core owner search media failure returns safe unavailable state
+        run: php 18-marketplace/tests/test-rc48-core-search-projection-failclosed.php
+      - name: Strict public marketplace min/max price and overflow regression
+        run: php 18-marketplace/tests/test-rc49-public-price-bounds.php
+      - name: REST post-dispatch evidence and recall SQL fail-closed response regression
+        run: php 18-marketplace/tests/test-rc50-rest-safety-projection.php
+      - name: Canonical public REST listing owner read fail-closed negative tests
+        run: php 18-marketplace/tests/test-rc52-public-rest-owner-read.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
-        if: startsWith(github.head_ref, 'fix/file18-')
         shell: bash
         run: |
           set -euo pipefail
@@ -195,16 +228,16 @@ jobs:
           set -euo pipefail
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-a"
           bash 18-marketplace/tools/build-release.sh "$RUNNER_TEMP/release-b"
-          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC30.zip"
-          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC30.zip"
+          A="$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC54.zip"
+          B="$RUNNER_TEMP/release-b/18-marketplace-2.1.0-RC54.zip"
           cmp "$A" "$B"
           unzip -t "$A"
           HASH_A="$(sha256sum "$A" | awk '{print $1}')"
           HASH_B="$(sha256sum "$B" | awk '{print $1}')"
           test "$HASH_A" = "$HASH_B"
-          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC30.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC30.zip.sha256"
+          printf '%s  %s\n' "$HASH_A" "18-marketplace-2.1.0-RC54.zip" > "$RUNNER_TEMP/release-a/18-marketplace-2.1.0-RC54.zip.sha256"
           {
-            echo '### File 18 Marketplace 2.1.0 RC30'
+            echo '### File 18 Marketplace 2.1.0 RC54'
             echo
             echo "SHA-256: \`$HASH_A\`"
             echo
@@ -213,9 +246,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.php == '8.3'
         with:
-          name: file18-marketplace-2.1.0-rc30
+          name: file18-marketplace-2.1.0-rc54
           path: |
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC30.zip
-            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC30.zip.sha256
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC54.zip
+            ${{ runner.temp }}/release-a/18-marketplace-2.1.0-RC54.zip.sha256
           if-no-files-found: error
           retention-days: 14

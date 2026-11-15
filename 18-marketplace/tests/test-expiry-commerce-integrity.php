@@ -13,6 +13,10 @@ final class MKT_DB {
 // This earlier expiry regression isolates the listing/COUNT failure path;
 // RC20 has a separate six-case recalled/SQL-outage commitment regression.
 final class MKT_Governance {
+    public static function table(string $name): string {
+        if ($name !== 'recalls') throw new InvalidArgumentException('Canonical governance test table must be recalls.');
+        return 'wp_mkt_recalls';
+    }
     public static function recall_publication_guard(string $public_id, bool $locking_read=false): bool|WP_Error { return false; }
 }
 final class MKT_Plan_Completion {

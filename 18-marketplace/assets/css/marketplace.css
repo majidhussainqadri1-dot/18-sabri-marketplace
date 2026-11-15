@@ -13,3 +13,18 @@
 @media(max-width:520px){.mkt-filter-panel,.mkt-form-row,.mkt-card-grid,.mkt-dashboard-stats,.mkt-facts{grid-template-columns:1fr}.mkt-gallery{grid-template-columns:1fr}.mkt-gallery figure:first-child{grid-column:auto}.mkt-actions .mkt-button{width:100%}.mkt-context-nav{overflow-x:auto;flex-wrap:nowrap;padding-bottom:.25rem}.mkt-icon-link{white-space:nowrap}.mkt-form-actions{flex-direction:column}.mkt-form-actions .mkt-button{width:100%}}
 @media(prefers-reduced-motion:no-preference){.mkt-card,.mkt-button,.mkt-icon-link{transition:transform .15s ease,box-shadow .15s ease,background .15s ease}.mkt-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(18,58,36,.12)}}
 @media(forced-colors:active){.mkt-button,.mkt-card,.mkt-panel,.mkt-form-section{border:1px solid ButtonText}}
+
+/* Bidirectional readability: preserve numeric price isolation and logical layout. */
+.mkt-container:lang(ur),.mkt-container:lang(ar),
+[dir="rtl"] .mkt-container { direction:rtl; text-align:start; }
+.mkt-container :is(.mkt-card,.mkt-detail-panel,.mkt-panel,.mkt-form-section,.mkt-empty,.mkt-safety-note) {
+    min-width:0; overflow-wrap:anywhere;
+}
+.mkt-container :is(input,select,textarea) { min-width:0; max-width:100%; }
+.mkt-container :is(.mkt-price bdi,.mkt-facts bdi) { unicode-bidi:isolate; }
+.mkt-container :is(.mkt-card,.mkt-detail-panel,.mkt-form-section) { scroll-margin-block-start:1rem; }
+@media(max-width:360px){
+    .mkt-container{width:calc(100% - .75rem);}
+    .mkt-modal-panel{padding:1rem;}
+    .mkt-context-nav{gap:.25rem;}
+}

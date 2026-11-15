@@ -76,6 +76,7 @@ final class MKT_Routes {
         wp_localize_script('mkt-marketplace', 'MKT_APP', [
             'restUrl' => esc_url_raw(rest_url(MKT_Contracts::REST_NAMESPACE . '/')),
             'nonce' => wp_create_nonce('wp_rest'),
+            'listingBase' => esc_url_raw(home_url('/marketplace/listing/')),
             'loggedIn' => is_user_logged_in(),
             'loginUrl' => wp_login_url(home_url('/marketplace/')),
             'commissionPercent' => 0,
@@ -84,6 +85,29 @@ final class MKT_Routes {
                 'error' => __('The action could not be completed.', 'marketplace'),
                 'saved' => __('Saved.', 'marketplace'),
                 'confirm' => __('Please confirm this action.', 'marketplace'),
+                'viewListing' => __('View listing', 'marketplace'),
+                'otherCategory' => __('Other', 'marketplace'),
+                'offerSubmitted' => __('Offer submitted.', 'marketplace'),
+                'reportSubmitted' => __('Report submitted for review.', 'marketplace'),
+                'linkCopied' => __('Link copied.', 'marketplace'),
+                'shareFailed' => __('The link could not be shared.', 'marketplace'),
+                'draftSaved' => __('Draft saved.', 'marketplace'),
+                'draftCreated' => __('Draft created.', 'marketplace'),
+                'listingSubmitted' => __('Listing submitted for review.', 'marketplace'),
+                'mediaRemoved' => __('Media reference removed.', 'marketplace'),
+                'listingUpdated' => __('Listing updated.', 'marketplace'),
+                'offerUpdated' => __('Offer updated.', 'marketplace'),
+                'reportAppealSubmitted' => __('Report appeal submitted.', 'marketplace'),
+                'disputeUpdated' => __('Dispute updated.', 'marketplace'),
+                'dealUpdated' => __('Deal updated.', 'marketplace'),
+                'disputeOpened' => __('Dispute opened.', 'marketplace'),
+                'removeMediaConfirm' => __('Remove this media reference?', 'marketplace'),
+                'counterAmount' => __('Enter the counter-offer amount.', 'marketplace'),
+                'counterTerms' => __('Optional counter-offer terms.', 'marketplace'),
+                'explainReview' => __('Explain why this decision should be reviewed.', 'marketplace'),
+                'explainDisputeReview' => __('Explain why the dispute decision should be reviewed.', 'marketplace'),
+                'approvedEvidenceRef' => __('Enter an approved evidence reference.', 'marketplace'),
+                'withdrawDisputeConfirm' => __('Withdraw this dispute?', 'marketplace'),
             ],
         ]);
     }
@@ -111,11 +135,19 @@ final class MKT_Routes {
         if ($route !== 'listing') {
             return;
         }
-        $listing = MKT_Listings::get((string) get_query_var('mkt_object_id'), false);
-        if (!$listing) {
+        global $wpdb;
+        try {
+            $wpdb->last_error = '';
+            $listing = MKT_Listings::get((string) get_query_var('mkt_object_id'), false);
+            if ($wpdb->last_error !== '' || !is_array($listing)) return;
+            $wpdb->last_error = '';
+            $item = MKT_Listings::public_dto($listing);
+            if ($wpdb->last_error !== '' || !is_array($item) || empty($item['url']) || empty($item['public_id'])) return;
+        } catch (Throwable $e) {
+            // A failed media/seller owner read must never take down wp_head
+            // or emit half a canonical/JSON-LD projection.
             return;
         }
-        $item = MKT_Listings::public_dto($listing);
         echo '<link rel="canonical" href="' . esc_url($item['url']) . '">' . "\n";
         $schema = [
             '@context' => 'https://schema.org',
@@ -137,7 +169,7 @@ final class MKT_Routes {
         if ($image) {
             $schema['image'] = esc_url_raw((string) $image);
         }
-        echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>' . "\n";
+        echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . '</script>' . "\n";
     }
 
     public static function document_title(array $parts): array {
