@@ -18,10 +18,11 @@ class WP_REST_Response {
 }
 class MKT_DB{public static function table($name){return 'wp_mkt_'.$name;}}
 class GovernanceDB {
+ public string $prefix='wp_';
  public string $last_error='';
  public string $failure='';
  public function esc_like($s){return (string)$s;}
- public function prepare($sql,...$args){return $sql;}
+ public function prepare($sql,...$args){return vsprintf(str_replace('%s',"'%s'",(string)$sql),$args);}
  public function get_var($sql){
    if($this->failure==='evidence_table'&&str_contains($sql,'listing_evidence')){$this->last_error='table inaccessible';return null;}
    if(str_contains($sql,'listing_evidence'))return 'wp_mkt_listing_evidence';
