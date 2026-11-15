@@ -9,7 +9,7 @@ function sanitize_text_field($v): string {return (string)$v;}
 function sanitize_key($v): string {return strtolower((string)$v);}
 function esc_url_raw($v): string {return (string)$v;}
 function home_url($p='/'): string {return 'https://sabri.example'.$p;}
-function apply_filters($hook,$default,...$args){return $hook==='sabri_platform_ingest_event' ? ($GLOBALS['platform_ack']??false) : $default;}
+function apply_filters($hook,$default,...$args){if($hook==='sabri_platform_ingest_event')return $GLOBALS['platform_ack']??false;if($hook==='mkt_required_event_consumers_acknowledged')return $GLOBALS['owner_ack']??true;return $default;}
 function has_action($name): int{return 0;}
 function assert_true($v,$m):void {if(!$v){fwrite(STDERR,"FAIL: $m\n");exit(1);}echo "PASS: $m\n";}
 function assert_same($expect,$got,$m):void {assert_true($expect===$got,$m.' expected='.var_export($expect,true).' got='.var_export($got,true));}
@@ -47,9 +47,10 @@ final class FakeDB {
 }
 $wpdb=new FakeDB();
 require dirname(__DIR__).'/includes/class-mkt-events.php';
-function scenario(bool $platform,bool $notify,array $targets,int $actor,int $attempts=0):string {
+function scenario(bool $platform,bool $notify,array $targets,int $actor,int $attempts=0,bool $owner_ack=true):string {
  global $wpdb;
  $GLOBALS['platform_ack']=$platform;
+ $GLOBALS['owner_ack']=$owner_ack;
  MKT_Integrations::$ack=$notify;
  MKT_Integrations::$recipients=[];
  $event=['event_id'=>'evt-01','event_type'=>'MarketplaceOfferCreated.v1','aggregate'=>['public_id'=>'test'],'actor_user_id'=>$actor,'payload'=>['notify_user_ids'=>$targets,'safe_summary'=>'Offer updated']];
@@ -67,6 +68,9 @@ assert_same('dead',scenario(true,false,[23],7,7),'At retry limit, missing notifi
 assert_same('processed',scenario(true,false,[7],7),'Originating actor does not require self-notification.');
 assert_same([],MKT_Integrations::$recipients,'No unnecessary actor notification was attempted.');
 assert_same('processed',scenario(true,false,[],7),'Events without recipients may finish when a domain consumer acknowledges.');
+assert_same('retry',scenario(true,true,[23],7,0,false),'File19 and platform ACK cannot conceal failed required search revocation.');
+assert_same('dead',scenario(true,true,[23],7,7,false),'Missing required owner ACK reaches dead letter.');
+assert_same('processed',scenario(true,true,[23],7,0,true),'All owner and File19 ACKs allow processed state.');
 assert_true(isset($wpdb->where_clauses[0]['available_at']), 'The Outbox final ACK is fenced by its exact processing-lease timestamp.');
 $wpdb->simulate_stolen_lease=true;
 assert_same('processing',scenario(true,true,[23],7),'A recovered new worker retains the processing claim when an old worker finalizes.');
