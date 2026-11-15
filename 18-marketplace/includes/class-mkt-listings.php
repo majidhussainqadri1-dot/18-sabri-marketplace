@@ -755,8 +755,35 @@ final class MKT_Listings {
         if (!is_array($rows) || $wpdb->last_error !== '') {
             throw new RuntimeException('Marketplace media evidence is unavailable.');
         }
-        return array_map(static function(array $row): array {
-            $row['metadata'] = json_decode((string) $row['metadata_json'], true) ?: [];
+        return array_map(static function(array $row) use ($public_only): array {
+            $raw = json_decode((string) $row['metadata_json'], true);
+            $raw = is_array($raw) ? $raw : [];
+            if ($public_only) {
+                // Media-owner metadata can contain EXIF GPS, patient identifiers,
+                // scanner details or internal provider tokens. A public listing
+                // needs only safe presentation URLs and bounded dimensions.
+                $public = [];
+                foreach (['url','thumbnail_url'] as $key) {
+                    $value = $raw[$key] ?? null;
+                    if (!is_string($value)) continue;
+                    $url = esc_url_raw($value);
+                    $scheme = strtolower((string) wp_parse_url($url, PHP_URL_SCHEME));
+                    if ($url !== '' && in_array($scheme, ['http','https'], true)) {
+                        $public[$key] = $url;
+                    }
+                }
+                foreach (['width','height'] as $key) {
+                    $value = $raw[$key] ?? null;
+                    if (is_numeric($value) && (int) $value >= 1 && (int) $value <= 20000) {
+                        $public[$key] = (int) $value;
+                    }
+                }
+                $row['metadata'] = $public;
+            } else {
+                // Seller-owned private draft workspace may need owner metadata;
+                // it is separately guarded by authenticated seller ownership.
+                $row['metadata'] = $raw;
+            }
             unset($row['metadata_json']);
             return $row;
         }, $rows);
