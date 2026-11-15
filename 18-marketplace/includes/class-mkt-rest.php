@@ -149,25 +149,44 @@ final class MKT_REST {
     public static function listings(WP_REST_Request $request): WP_REST_Response {
         $rate = MKT_Rate_Limiter::check('public_search');
         if (is_wp_error($rate)) return self::error_response($rate);
-        return rest_ensure_response(MKT_Listings::search([
-            'q' => $request->get_param('q'),
-            'category' => $request->get_param('category'),
-            'country' => $request->get_param('country'),
-            'city' => $request->get_param('city'),
-            'currency' => $request->get_param('currency'),
-            'price_min' => $request->get_param('price_min'),
-            'price_max' => $request->get_param('price_max'),
-            'cursor' => $request->get_param('cursor'),
-            'limit' => $request->get_param('limit'),
-        ]));
+        try {
+            $result = MKT_Listings::search([
+                'q' => $request->get_param('q'),
+                'category' => $request->get_param('category'),
+                'country' => $request->get_param('country'),
+                'city' => $request->get_param('city'),
+                'currency' => $request->get_param('currency'),
+                'price_min' => $request->get_param('price_min'),
+                'price_max' => $request->get_param('price_max'),
+                'cursor' => $request->get_param('cursor'),
+                'limit' => $request->get_param('limit'),
+            ]);
+        } catch (Throwable $e) {
+            return self::public_read_unavailable();
+        }
+        $error = (string) ($result['error'] ?? '');
+        if ($error === 'search_unavailable') return self::public_read_unavailable();
+        if ($error === 'cursor_expired') return new WP_REST_Response($result, 410);
+        if (str_starts_with($error, 'invalid_')) return new WP_REST_Response($result, 400);
+        return rest_ensure_response($result);
     }
 
     public static function listing(WP_REST_Request $request): WP_REST_Response {
         $rate = MKT_Rate_Limiter::check('public_detail');
         if (is_wp_error($rate)) return self::error_response($rate);
-        $listing = MKT_Listings::get((string) $request['id'], false);
-        if (!$listing) return self::error_response(new WP_Error('mkt_listing_not_found', __('Listing not found.', 'marketplace'), ['status' => 404]));
-        return rest_ensure_response(MKT_Listings::public_dto($listing));
+        global $wpdb;
+        try {
+            $wpdb->last_error = '';
+            $listing = MKT_Listings::get((string) $request['id'], false);
+            if ($wpdb->last_error !== '') return self::public_read_unavailable();
+            if (!$listing) return self::error_response(new WP_Error('mkt_listing_not_found', __('Listing not found.', 'marketplace'), ['status' => 404]));
+            $wpdb->last_error = '';
+            $dto = MKT_Listings::public_dto($listing);
+            if ($wpdb->last_error !== '' || !is_array($dto) || empty($dto['public_id'])) return self::public_read_unavailable();
+            return rest_ensure_response($dto);
+        } catch (Throwable $e) {
+            return self::public_read_unavailable();
+        }
     }
 
     public static function create_listing(WP_REST_Request $request): WP_REST_Response {
@@ -294,6 +313,15 @@ final class MKT_REST {
 
     private static function idempotency(WP_REST_Request $request, array $data): string {
         return sanitize_text_field((string) ($request->get_header('Idempotency-Key') ?: ($data['idempotency_key'] ?? '')));
+    }
+
+    private static function public_read_unavailable(): WP_REST_Response {
+        // A read-side owner SQL/media failure is not evidence of 404 or an
+        // empty catalogue. Do not disclose database paths or statements.
+        return new WP_REST_Response([
+            'code'=>'mkt_public_read_unavailable',
+            'message'=>__('Marketplace information is temporarily unavailable.', 'marketplace'),
+        ],503);
     }
 
     private static function respond($result): WP_REST_Response {
