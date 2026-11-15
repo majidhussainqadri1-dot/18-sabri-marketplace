@@ -3,16 +3,31 @@ defined('ABSPATH') || exit;
 $public_id=(string)get_query_var('mkt_object_id');
 $listing=MKT_Listings::get($public_id,false);
 $recall=class_exists('MKT_Governance') ? MKT_Governance::public_recall($public_id) : null;
-// A recall activation intentionally pauses an active listing. Keep a narrowly
-// scoped public safety notice reachable for that exact recalled object without
-// re-exposing arbitrary drafts/paused/private listings.
-if (!$listing && $recall) $listing=MKT_Listings::get($public_id,true);
-if (!$listing) {
-    status_header(404);
+// Recall may remain public after the listing becomes private, but only as a
+// safety notice. Never pass the private owner row into public_dto().
+$recall_notice_only=false;
+if (!$listing && $recall){
+    $owner=MKT_Listings::get($public_id,true);
+    $recall_notice_only=is_array($owner)&&!empty($owner['published_at']);
+    unset($owner);
+}
+if (!$listing || $recall_notice_only){
+    if (!$recall_notice_only) status_header(404);
     nocache_headers();
     header('X-Robots-Tag: noindex, noarchive, nofollow', true);
+    header('Cache-Control: private, no-store, max-age=0', true);
 }
 require MKT_DIR . 'templates/_header.php';
+if ($recall_notice_only) { ?>
+<section class="mkt-empty mkt-recall-only" role="alert" aria-labelledby="mkt-recall-notice">
+  <h1 id="mkt-recall-notice"><?php esc_html_e('Recall / takedown notice','marketplace'); ?></h1>
+  <p><?php esc_html_e('Offers and seller-contact actions are disabled while this safety notice is active.','marketplace'); ?></p>
+  <p><?php echo esc_html((string)($recall['reason']??'')); ?></p>
+  <?php if (!empty($recall['batch_ref'])): ?><p><?php echo esc_html(sprintf(__('Batch/reference: %s','marketplace'),(string)$recall['batch_ref'])); ?></p><?php endif; ?>
+  <?php if (!empty($recall['regulator_reference'])): ?><p><?php echo esc_html(sprintf(__('Regulatory reference: %s','marketplace'),(string)$recall['regulator_reference'])); ?></p><?php endif; ?>
+  <a class="mkt-button mkt-button-primary" href="<?php echo esc_url(home_url('/marketplace/')); ?>"><?php esc_html_e('Return to Marketplace','marketplace'); ?></a>
+</section>
+<?php require MKT_DIR.'templates/_footer.php'; return; }
 if (!$listing) { ?>
 <section class="mkt-empty"><span aria-hidden="true">!</span><h1><?php esc_html_e('Listing unavailable','marketplace'); ?></h1><p><?php esc_html_e('The listing may have expired, been removed, or no longer be publicly eligible.','marketplace'); ?></p><a class="mkt-button mkt-button-primary" href="<?php echo esc_url(home_url('/marketplace/')); ?>"><?php esc_html_e('Return to Marketplace','marketplace'); ?></a></section>
 <?php require MKT_DIR.'templates/_footer.php'; return; }
