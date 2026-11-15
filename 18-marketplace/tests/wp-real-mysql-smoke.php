@@ -6,10 +6,12 @@
 if (!defined('ABSPATH') || !defined('WP_CLI')) {
     throw new RuntimeException('This test must run under isolated WP-CLI WordPress.');
 }
-$checks = 0;
+$GLOBALS['file18_mysql_integration_assertions'] = 0;
 function assert_wp_marketplace($condition, $message) {
-    global $checks;
-    $checks++;
+    // WP-CLI eval-file() executes the script in a local scope. A bare
+    // $checks counter can therefore stay zero in the final summary while
+    // this helper increments a different global variable.
+    $GLOBALS['file18_mysql_integration_assertions']++;
     if (!$condition) throw new RuntimeException('FAIL: '.$message);
     WP_CLI::log('PASS WP/MYSQL: '.$message);
 }
@@ -130,4 +132,6 @@ assert_wp_marketplace(MKT_Listings::get($listing_id_public,false)===null, 'Expir
 assert_wp_marketplace(MKT_Listings::search(['limit'=>20])['items']===[], 'Expired listing cannot appear in public search');
 assert_wp_marketplace($wpdb->last_error==='', 'Real MySQL integration projection finished with no unhandled SQL error');
 
-WP_CLI::success("File18 isolated real WordPress 7.0.1 / MySQL 8 smoke: $checks assertions passed. This does not prove staging or live.");
+$actual_assertions = (int) $GLOBALS['file18_mysql_integration_assertions'];
+if ($actual_assertions < 35) throw new RuntimeException('MySQL integration assertions were not counted correctly.');
+WP_CLI::success("File18 isolated real WordPress 7.0.1 / MySQL 8 smoke: {$actual_assertions} assertions passed. This does not prove staging or live.");
