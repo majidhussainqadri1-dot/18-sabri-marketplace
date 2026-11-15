@@ -11,7 +11,9 @@ $must=[
   'False cure claim','Privacy violation','Open dispute','Submit for review',
   'Seller Studio','Approved media reference','Currency','Language',
   'Report submitted for review.','Offer submitted.','Remove this media reference?',
-  'Batch/reference: %s','Regulatory reference: %s'
+  'Batch/reference: %s','Regulatory reference: %s',
+  'Search results unavailable','Search temporarily unavailable. Please try again later.',
+  'Please correct the search filters and try again.'
 ];
 $checks=0;
 function verify_lang(bool $condition,string $description):void{

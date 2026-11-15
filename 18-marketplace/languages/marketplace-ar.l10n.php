@@ -223,6 +223,9 @@ return [
         'Explain why the dispute decision should be reviewed.' => 'اشرح سبب طلب مراجعة قرار النزاع.',
         'Enter an approved evidence reference.' => 'أدخل مرجع دليل معتمد.',
         'Withdraw this dispute?' => 'هل تريد سحب هذا النزاع؟',
+        'Search results unavailable' => 'نتائج البحث غير متاحة',
+        'Search temporarily unavailable. Please try again later.' => 'البحث غير متاح مؤقتًا. يُرجى المحاولة لاحقًا.',
+        'Please correct the search filters and try again.' => 'يُرجى تصحيح مرشحات البحث ثم المحاولة مجددًا.',
         'No action performed.' => 'لم يُنفذ أي إجراء.',
     ],
 ];

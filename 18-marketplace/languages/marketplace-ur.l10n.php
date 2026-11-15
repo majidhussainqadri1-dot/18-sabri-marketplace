@@ -223,6 +223,9 @@ return [
         'Explain why the dispute decision should be reviewed.' => 'بتائیں کہ تنازع کے فیصلے پر نظرِ ثانی کیوں ہونی چاہیے۔',
         'Enter an approved evidence reference.' => 'منظور شدہ ثبوت کا حوالہ درج کریں۔',
         'Withdraw this dispute?' => 'کیا اس تنازع کو واپس لینا ہے؟',
+        'Search results unavailable' => 'تلاش کے نتائج دستیاب نہیں',
+        'Search temporarily unavailable. Please try again later.' => 'تلاش عارضی طور پر دستیاب نہیں۔ کچھ دیر بعد دوبارہ کوشش کریں۔',
+        'Please correct the search filters and try again.' => 'تلاش کے فلٹر درست کر کے دوبارہ کوشش کریں۔',
         'No action performed.' => 'کوئی کارروائی نہیں ہوئی۔',
     ],
 ];
