@@ -138,13 +138,33 @@ final class MKT_Finalization {
         if ($has_more) array_pop($rows);
         $items = [];
         foreach ($rows as $row) {
-            $item = MKT_Listings::public_dto($row);
-            $item['language'] = (string) ($row['marketplace_language'] ?? 'und');
-            if (class_exists('MKT_Governance')) {
-                $item['evidence'] = MKT_Governance::public_evidence((string) $item['public_id']);
-                $item['recall'] = MKT_Governance::public_recall((string) $item['public_id']);
+            try {
+                $wpdb->last_error = '';
+                $item = MKT_Listings::public_dto($row);
+                if (!is_array($item) || empty($item['public_id']) || $wpdb->last_error !== '') {
+                    return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+                }
+                $item['language'] = (string) ($row['marketplace_language'] ?? 'und');
+                if (class_exists('MKT_Governance')) {
+                    // A failed evidence/recall read may look like "no safety
+                    // warning". Never publish a partial supposedly safe page.
+                    $wpdb->last_error = '';
+                    $item['evidence'] = MKT_Governance::public_evidence((string) $item['public_id']);
+                    if ($wpdb->last_error !== '') {
+                        return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+                    }
+                    $wpdb->last_error = '';
+                    $item['recall'] = MKT_Governance::public_recall((string) $item['public_id']);
+                    if ($wpdb->last_error !== '') {
+                        return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+                    }
+                }
+                $items[] = $item;
+            } catch (Throwable $e) {
+                // Media rights and owner-governance failures must be an HTTP 503
+                // via search(), not a partial page or uncaught fatal exception.
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
             }
-            $items[] = $item;
         }
         $next_cursor = $has_more && $rows ? (int) end($rows)['id'] : null;
         return ['items'=>$items, 'next_cursor'=>$next_cursor, 'has_more'=>$has_more];
