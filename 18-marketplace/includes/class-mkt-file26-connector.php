@@ -39,10 +39,12 @@ final class MKT_File26_Connector {
         if(is_object($registry)&&method_exists($registry,'register')){$registry->register(self::manifest());}
     }
     private static function source_ready(){
+        // Safe Mode blocks mutations, not policy-checked public reading.
+        // Unverified canonical schema still fails closed.
         return class_exists('MKT_DB')&&class_exists('MKT_Listings')&&
-            MKT_DB::schema_ready()&&!((bool)get_option('mkt_safe_mode',false));
+            MKT_DB::schema_ready();
     }
-    private static function project($row,$known_version=0){
+    private static function project($row,$known_version=0,$strict=false){
         if(!self::source_ready()||!is_array($row)||($row['status']??'')!=='active'||
             ($row['seller_status']??'')!=='approved'){return null;}
         $version=(int)($row['version']??0);
@@ -54,10 +56,16 @@ final class MKT_File26_Connector {
         // expiry and active recall). Do not trust an intermediate SQL row.
         $latest=MKT_Listings::get($id,false);
         if(!is_array($latest)||(int)$latest['version']!==$version){return null;}
-        try{$dto=MKT_Listings::public_dto($latest);}catch(Throwable $e){return null;}
-        if(!is_array($dto)||empty($dto['title'])||empty($dto['url'])){return null;}
+        try{$dto=MKT_Listings::public_dto($latest);}catch(Throwable $e){
+            return $strict ? new WP_Error('file18_search_projection_unavailable','Marketplace public listing projection is unavailable.') : null;
+        }
+        if(!is_array($dto)||empty($dto['title'])||empty($dto['url'])){
+            return $strict ? new WP_Error('file18_search_projection_invalid','Marketplace public listing projection is incomplete.') : null;
+        }
         $url=esc_url_raw((string)$dto['url']);
-        if(!$url||!wp_http_validate_url($url)){return null;}
+        if(!$url||!wp_http_validate_url($url)){
+            return $strict ? new WP_Error('file18_search_projection_invalid','Marketplace public listing URL is invalid.') : null;
+        }
         $title=sanitize_text_field((string)$dto['title']);
         $category=sanitize_text_field((string)($dto['category']??''));
         $city=sanitize_text_field((string)($dto['location_city']??''));
@@ -82,8 +90,21 @@ final class MKT_File26_Connector {
         $more=count($rows)>$limit;if($more){array_pop($rows);}
         $items=array();
         foreach($rows as $row){
+            $wpdb->last_error='';
             $latest=MKT_Listings::get((string)$row['public_id'],false);
-            if(is_array($latest)){$doc=self::project($latest,(int)$row['version']);if($doc){$items[]=$doc;}}
+            if($wpdb->last_error!==''){
+                return new WP_Error('file18_owner_unreadable','Marketplace public listing eligibility could not be verified.');
+            }
+            if(is_array($latest)){
+                // Do not represent a failed owner/media read as a successful partial page.
+                $wpdb->last_error='';
+                $doc=self::project($latest,(int)$row['version'],true);
+                if(is_wp_error($doc))return $doc;
+                if($wpdb->last_error!==''){
+                    return new WP_Error('file18_owner_unreadable','Marketplace public listing projection could not be verified.');
+                }
+                if($doc){$items[]=$doc;}
+            }
             $id=max($id,(int)$row['id']);
         }
         return array('items'=>$items,'done'=>!$more,'next_cursor'=>$more?(string)$id:'');

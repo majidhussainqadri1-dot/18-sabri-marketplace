@@ -173,10 +173,11 @@ jobs:
         run: php 18-marketplace/tests/test-rc27-commerce-final-readback.php
       - name: RC28 Listing direct owner atomic and final readback regression
         run: php 18-marketplace/tests/test-rc28-listing-atomic-receipts.php
+      - name: File26 owner Safe Mode/SQL-failure regression
+        run: php 18-marketplace/tests/test-rc31-file26-public-source.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
-        if: startsWith(github.head_ref, 'fix/file18-')
         shell: bash
         run: |
           set -euo pipefail
