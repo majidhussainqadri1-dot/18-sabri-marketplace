@@ -13,6 +13,7 @@ class MKT_Contracts{
  public static function public_listing_fields():array{return ['public_id','title','category','description','price','currency','status'];}
 }
 class MKT_DB{public static function table($n):string{return 'wp_mkt_'.$n;}}
+class MKT_Governance{public static function table($n):string{return 'wp_mkt_'.$n;}}
 class QueryDB{
  public string $last_error='';
  public bool $break_media=false;
