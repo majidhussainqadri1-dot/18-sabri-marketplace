@@ -81,7 +81,7 @@ $wpdb->rows=[row(1),row(2,'draft'),row(3),array_merge(row(4),['recalled'=>true])
 require dirname(__DIR__).'/includes/class-mkt-file26-connector.php';
 $m=MKT_File26_Connector::manifest();
 ok($m['status']==='proposed','connector remains unapproved');
-ok($m['source_event_cutover_approved']??true,'manifest has no fake approval'); // checked more precisely by health()
+ok(str_contains((string)($m['event_contract']??''),'pending-file26-cutover'),'File26 cutover must remain pending');
 ok($GLOBALS['safe_mode']===true,'Safe Mode fixture');
 $r=MKT_File26_Connector::list_batch('',2);
 ok(is_array($r),'safe public browsing is retained in Safe Mode');
