@@ -26,6 +26,8 @@ final class MKT_File26_Connector {
         add_action('mkt_event',array(__CLASS__,'on_outbox_event'),30,1);
         add_filter('mkt_required_event_consumers_acknowledged',array(__CLASS__,'require_ack'),20,2);
         add_filter('mkt_file26_event_acknowledged',array(__CLASS__,'owner_ack'),20,2);
+        add_action('init',array(__CLASS__,'maybe_schedule_reconcile'),50,0);
+        add_action('mkt_file26_owner_reconcile',array(__CLASS__,'reconcile_batch'),10,0);
     }
     public static function manifest(){
         return array(
@@ -108,6 +110,56 @@ final class MKT_File26_Connector {
             $result=sabri_file26_tombstone_document(self::SLUG,'marketplace',$public_id,$version,'restricted');
             return $result===true;
         }catch(Throwable $e){return false;}
+    }
+    /** Bounded reconciler: recurring owner rereads cover missed events/seller-wide holds. */
+    public static function maybe_schedule_reconcile(): void {
+        if(!self::active())return;
+        if(!wp_next_scheduled('mkt_file26_owner_reconcile')){
+            wp_schedule_single_event(time()+300,'mkt_file26_owner_reconcile');
+        }
+    }
+    public static function reconcile_batch(){
+        global $wpdb;
+        if(!self::active()||!self::source_ready())
+            return new WP_Error('file18_file26_reconcile_inactive','The owner search connector or schema is not ready.');
+        $lock='file18:file26:reconcile';
+        $wpdb->last_error='';
+        $acquired=$wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, 0)',$lock));
+        if((string)$acquired!=='1'||$wpdb->last_error!=='')
+            return new WP_Error('file18_file26_reconcile_locked','Marketplace owner reconciliation is unavailable or busy.');
+        try {
+            $raw=get_option('mkt_file26_reconcile_cursor','0');
+            $cursor=is_scalar($raw)?(string)$raw:'';
+            if(!preg_match('/^(0|[1-9][0-9]{0,17})$/D',$cursor))
+                return new WP_Error('file18_file26_reconcile_cursor_invalid','Stored owner reconciliation cursor is invalid.');
+            $limit=50;$table=MKT_DB::table('listings');
+            $wpdb->last_error='';
+            $rows=$wpdb->get_results($wpdb->prepare("SELECT id,public_id FROM $table WHERE id>%d ORDER BY id ASC LIMIT %d",(int)$cursor,$limit+1),ARRAY_A);
+            if(!is_array($rows)||$wpdb->last_error!=='')
+                return new WP_Error('file18_file26_reconcile_sql_unavailable','Owner reconciliation listing page could not be read.');
+            $has_more=count($rows)>$limit;
+            if($has_more)array_pop($rows);
+            $last=(int)$cursor;
+            foreach($rows as $row){
+                $id=(int)($row['id']??0);
+                $public_id=(string)($row['public_id']??'');
+                if($id<1||$id<=$last||!preg_match('/^[a-f0-9-]{36}$/iD',$public_id)
+                    ||!self::sync_public_listing($public_id)){
+                    return new WP_Error('file18_file26_reconcile_delivery_failed','A marketplace listing could not be reconciled safely.');
+                }
+                $last=$id;
+            }
+            $next=$has_more?(string)$last:'0';
+            update_option('mkt_file26_reconcile_cursor',$next,false);
+            if((string)get_option('mkt_file26_reconcile_cursor','0')!==$next)
+                return new WP_Error('file18_file26_reconcile_checkpoint_failed','Owner reconciliation cursor could not be persisted.');
+            return array('processed'=>count($rows),'done'=>!$has_more,'next_cursor'=>$next);
+        }catch(Throwable $e){
+            return new WP_Error('file18_file26_reconcile_failed','Owner reconciliation failed without advancing its checkpoint.');
+        }finally{
+            $wpdb->get_var($wpdb->prepare('SELECT RELEASE_LOCK(%s)',$lock));
+            self::maybe_schedule_reconcile();
+        }
     }
     private static function source_ready(){
         // Safe Mode blocks mutations, not policy-checked public reading.

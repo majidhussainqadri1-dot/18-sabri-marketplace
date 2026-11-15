@@ -183,6 +183,8 @@ jobs:
         run: node 18-marketplace/tests/test-rc34-client-offer-retry.mjs
       - name: File26 owner event receipt, upsert and tombstone regression
         run: php 18-marketplace/tests/test-rc35-file26-event-receipt.php
+      - name: File26 bounded owner reconciliation checkpoint and retry regression
+        run: php 18-marketplace/tests/test-rc36-file26-owner-reconcile.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
