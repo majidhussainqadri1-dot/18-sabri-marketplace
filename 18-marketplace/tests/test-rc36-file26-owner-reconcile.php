@@ -101,7 +101,7 @@ $wpdb->read_failed=false;$fail_writes=true;
 $r=MKT_File26_Connector::reconcile_batch();
 assert_ok(is_wp_error($r)&&$r->get_error_code()==='file18_file26_reconcile_delivery_failed','Target search failure denied');
 assert_ok($GLOBALS['options']['mkt_file26_reconcile_cursor']==='0','Target write failure does not advance cursor');
-$fail_writes=false;$GLOBALS['block_options']=true;
+$fail_writes=false;$GLOBALS['options']['mkt_file26_reconcile_cursor']='1';$GLOBALS['block_options']=true;
 $r=MKT_File26_Connector::reconcile_batch();
 assert_ok(is_wp_error($r)&&$r->get_error_code()==='file18_file26_reconcile_checkpoint_failed','Cursor persistence failure rejected');
 $GLOBALS['block_options']=false;
