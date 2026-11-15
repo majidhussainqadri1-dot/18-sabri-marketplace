@@ -25,6 +25,7 @@ final class MKT_File26_Connector {
         add_filter('sabri_file26_connector_manifests',array(__CLASS__,'append'),20);
         add_action('mkt_event',array(__CLASS__,'on_outbox_event'),30,1);
         add_filter('mkt_required_event_consumers_acknowledged',array(__CLASS__,'require_ack'),20,2);
+        add_filter('mkt_file26_event_acknowledged',array(__CLASS__,'owner_ack'),20,2);
     }
     public static function manifest(){
         return array(
@@ -51,7 +52,7 @@ final class MKT_File26_Connector {
     private static function active(): bool {
         if(!class_exists('\\Sabri\\File26\\Plugin'))return false;
         try {
-            $plugin=\\Sabri\\File26\\Plugin::instance();
+            $plugin=\Sabri\File26\Plugin::instance();
             return is_object($plugin)&&method_exists($plugin,'connectors')
                 &&$plugin->connectors()->is_active(self::SLUG)===true;
         } catch(Throwable $e){return false;}
@@ -66,6 +67,12 @@ final class MKT_File26_Connector {
         $id=(string)($event['event_id']??'');
         if($id==='')return;
         self::$receipts[$id]=self::sync_public_listing((string)($event['aggregate']['public_id']??''));
+    }
+    public static function owner_ack($previous,$event): bool {
+        if($previous===true)return true;
+        if(!self::active()||!self::relevant($event))return false;
+        $id=(string)($event['event_id']??'');
+        return $id!==''&&(self::$receipts[$id]??false)===true;
     }
     public static function require_ack($previous,$event): bool {
         if(!self::active()||!self::relevant($event))return $previous===true;

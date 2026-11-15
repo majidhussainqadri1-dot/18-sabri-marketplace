@@ -93,7 +93,10 @@ final class MKT_Events {
                 $notification_targets = array_values(array_filter($recipient_ids, static fn(int $uid): bool => $uid > 0 && $uid !== (int) ($event['actor_user_id'] ?? 0)));
                 $notification_required = !empty($notification_targets);
                 $notification_ack = $notification_required ? self::send_derived_notifications($event) : false;
-                $domain_ack = $platform_ack || $local_ack;
+                // Only a positively delivered File26 owner event, never an
+                // action hook alone, can be a valid additional domain consumer.
+                $owner_ack = apply_filters('mkt_file26_event_acknowledged', false, $event);
+                $domain_ack = $platform_ack || $local_ack || $owner_ack === true;
                 // A required owner consumer must positively ACK; File19/platform ACKs
                 // cannot conceal an unindexed or unrevoked marketplace listing.
                 $required_ack = apply_filters('mkt_required_event_consumers_acknowledged', true, $event);

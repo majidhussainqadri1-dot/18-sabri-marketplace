@@ -9,3 +9,6 @@ Outbox final acknowledgement requires a dedicated `mkt_required_event_consumers_
 RC35 runs actual connector PHP against fake WordPress/File26/DB fixtures with 17+ negative/positive assertions; existing File19 acknowledgement regression also tests missing owner consumer ACK. QA now contains 64 stages (40 repeats per PHP 8.1 and 8.3).
 
 **Remaining:** Seller-wide bulk suspension fanout has no proven per-listing tombstone events, File26 full reindex/tombstone recovery and staging activation need actual MySQL/WordPress evidence. No live change made. Exact deployed code ابھی unverified ہے؛ repository-based diagnosis provisional ہے۔
+
+## RC35 exact-head CI correction
+Fixed a PHP source namespace escaping mistake confirmed by automated PHP lint in commit 25e358c2. The File26 owner receipt is additionally treated as a positive domain consumer ONLY when actually obtained; no consumer/no notification still stays retryable. Both required-ack and domain-ack regressions are included.

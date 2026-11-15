@@ -87,7 +87,7 @@ $wpdb->rows=[row(1),row(2,'draft'),row(3),array_merge(row(4),['recalled'=>true])
 require dirname(__DIR__).'/includes/class-mkt-file26-connector.php';
 MKT_File26_Connector::register();
 ok($GLOBALS['eager_registry_calls']===0,'File26 schema-unverified eager registration prohibited');
-ok($GLOBALS['registered_filters']===['sabri_file26_connector_manifests'],'Exactly one schema-verified File26 manifest hook');
+ok($GLOBALS['registered_filters']===['sabri_file26_connector_manifests','mkt_required_event_consumers_acknowledged','mkt_file26_event_acknowledged'],'Manifest plus explicit receipt filters only');
 $m=MKT_File26_Connector::manifest();
 ok($m['status']==='proposed','connector remains unapproved');
 ok(str_contains((string)($m['event_contract']??''),'pending-file26-cutover'),'File26 cutover must remain pending');
