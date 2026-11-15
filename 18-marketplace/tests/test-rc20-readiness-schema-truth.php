@@ -33,6 +33,10 @@ class ReadinessFakeDB {
  }
 }
 $wpdb=new ReadinessFakeDB();
+// The production bootstrap preloads source-manifest diagnostics before Admin.
+// Mirror that dependency in the standalone readiness regression.
+defined('MKT_DIR') || define('MKT_DIR', dirname(__DIR__) . '/');
+require dirname(__DIR__).'/includes/class-mkt-deployment-reality.php';
 require dirname(__DIR__).'/includes/class-mkt-admin.php';
 $ok=MKT_Admin::system_status();
 assert_same('ready_for_staging_tests',$ok['overall'],'All verified source-owner schemas permit staging preparation (not live acceptance).');
