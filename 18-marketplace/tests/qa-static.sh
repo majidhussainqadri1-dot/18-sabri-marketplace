@@ -206,7 +206,7 @@ grep -q "define('MKT_VERSION', '2.1.0')" "$ROOT/marketplace.php"
 grep -q 'Stable tag: 2.1.0' "$ROOT/readme.txt"
 grep -q '0% platform commission' "$ROOT/readme.txt"
 # Candidate identity must match the build script and the exact-head CI artifact.
-grep -Fq 'PACKAGE="18-marketplace-${VERSION}-RC31.zip"' "$ROOT/tools/build-release.sh"
+grep -Fq 'PACKAGE="18-marketplace-${VERSION}-RC39.zip"' "$ROOT/tools/build-release.sh"
 
 echo '[67/67] Four-plan governing invariants'
 php "$ROOT/tests/test-four-plan-invariants.php"

@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$(dirname "$ROOT")"
 OUT="${1:-$PROJECT/release}"
 VERSION="2.1.0"
-PACKAGE="18-marketplace-${VERSION}-RC31.zip"
+PACKAGE="18-marketplace-${VERSION}-RC39.zip"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1786089600}"
 export SOURCE_DATE_EPOCH
 mkdir -p "$OUT"
@@ -29,6 +29,6 @@ find "$STAGE" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 )
 sha256sum "$OUT/$PACKAGE" > "$OUT/$PACKAGE.sha256"
 unzip -t "$OUT/$PACKAGE" >/dev/null
-python3 -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=z.namelist(); assert n and all(x.startswith('18-marketplace/') for x in n); assert not any('..' in x.split('/') for x in n); assert '18-marketplace/marketplace.php' in n; assert '18-marketplace/MANIFEST.sha256' in n; print('PASS: archive path safety and canonical top-level folder')" "$OUT/$PACKAGE"
+python3 -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); n=z.namelist(); assert n and all(x.startswith('18-marketplace/') for x in n); assert not any('..' in x.split('/') for x in n); assert '18-marketplace/marketplace.php' in n; assert '18-marketplace/MANIFEST.sha256' in n; assert all('18-marketplace/languages/marketplace-'+s+'.l10n.php' in n for s in ('ur','ur_PK','ar')); assert not any(x.startswith('18-marketplace/tests/') or x.startswith('18-marketplace/tools/') for x in n); print('PASS: archive path safety, language catalogs and source-only test exclusions')" "$OUT/$PACKAGE"
 echo "Built $OUT/$PACKAGE"
 cat "$OUT/$PACKAGE.sha256"
