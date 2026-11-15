@@ -705,7 +705,21 @@ final class MKT_Listings {
         if ($has_more) {
             array_pop($rows);
         }
-        $items = array_map($private ? [self::class, 'private_dto'] : [self::class, 'public_dto'], $rows);
+        $items = [];
+        foreach ($rows as $row) {
+            try {
+                $wpdb->last_error = '';
+                $item = $private ? self::private_dto($row) : self::public_dto($row);
+                if (!is_array($item) || empty($item['public_id']) || $wpdb->last_error !== '') {
+                    return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+                }
+                $items[] = $item;
+            } catch (Throwable $e) {
+                // A failed File10 media rights query must not turn a search
+                // page into either a fatal error or a partly trusted response.
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'search_unavailable'];
+            }
+        }
         $next_cursor = $has_more && $rows ? (int) end($rows)['id'] : null;
         return ['items' => $items, 'next_cursor' => $next_cursor, 'has_more' => $has_more];
     }
