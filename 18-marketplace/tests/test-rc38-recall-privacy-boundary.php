@@ -17,13 +17,15 @@ class MKT_Governance {
 }
 class MKT_Listings {
   public static bool $published=true;
+  public static bool $stale_public_read=false;
   public static int $dto_calls=0;
   public static function get($id,$private=false):?array{
-    return !$private?null:[
+    $row=[
       'published_at'=>self::$published?'2026-10-01 00:00:00':null,
       'title'=>'PRIVATE_PATIENT_TITLE','price'=>'9999','description'=>'SECRET_MEDICAL_DETAILS',
       'location_city'=>'PRIVATE_RESIDENCE','store_name'=>'PRIVATE_SELLER'
     ];
+    return $private||self::$stale_public_read?$row:null;
   }
   public static function public_dto($row):array{self::$dto_calls++;throw new RuntimeException('Private DTO reached');}
 }
@@ -45,6 +47,12 @@ try{
   }
   check_rc38(MKT_Listings::$dto_calls===0,'Private object never enters public DTO');
   check_rc38(($GLOBALS['no_cache']??false)===true,'Recall response no-cache');
+  MKT_Listings::$stale_public_read=true;
+  $html=run_template();
+  check_rc38(str_contains($html,'Recall / takedown notice'),'Concurrent stale public listing read still produces only recall safety notice');
+  check_rc38(!str_contains($html,'PRIVATE_PATIENT_TITLE')&&!str_contains($html,'SECRET_MEDICAL_DETAILS'),'Late recall never republishes stale public Listing DTO');
+  check_rc38(MKT_Listings::$dto_calls===0,'Late recall never invokes full public DTO');
+  MKT_Listings::$stale_public_read=false;
   MKT_Listings::$published=false;$GLOBALS['status']=null;
   $html=run_template();
   check_rc38(($GLOBALS['status']??null)===404,'Unpublished draft remains HTTP 404');

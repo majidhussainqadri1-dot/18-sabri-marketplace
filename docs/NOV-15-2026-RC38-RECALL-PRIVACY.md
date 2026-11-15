@@ -6,3 +6,6 @@ Confirmed source weakness: the previous recall fallback used a private owner Lis
 New RC38 test executes the actual PHP template against fake WordPress, injects canary private fields, and checks 404/no-cache and no private DTO invocation. Source regression, not a live or browser acceptance claim.
 
 Still pending live/Hostinger evidence and full independent safety review; PR #33 remains Draft.
+
+## RC38 second adversarial review — concurrent recall race
+A new race was identified: an earlier public `get()` could have returned the Listing before a recall became active, then `public_recall()` returned the now-active recall. The template would still have rendered that stale row's full DTO. Whenever the recall notice is active, discard even an earlier apparently-public Listing row and render safety-only content, or return 404 for a never-published draft. Regression stubs a stale public read followed by active recall and confirms zero DTO calls.

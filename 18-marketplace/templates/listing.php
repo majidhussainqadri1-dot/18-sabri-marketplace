@@ -6,7 +6,11 @@ $recall=class_exists('MKT_Governance') ? MKT_Governance::public_recall($public_i
 // Recall may remain public after the listing becomes private, but only as a
 // safety notice. Never pass the private owner row into public_dto().
 $recall_notice_only=false;
-if (!$listing && $recall){
+if ($recall){
+    // Between public eligibility read and recall lookup, the listing may have
+    // been revoked. A stale earlier public row must not bypass the safety-only
+    // notice path or restore old offer/contact/product details.
+    $listing=null;
     $owner=MKT_Listings::get($public_id,true);
     $recall_notice_only=is_array($owner)&&!empty($owner['published_at']);
     unset($owner);
