@@ -32,7 +32,7 @@ assert_wp_marketplace((string)get_option('mkt_schema_version') === MKT_SCHEMA_VE
 $manifest = MKT_Deployment_Reality::snapshot();
 assert_wp_marketplace(($manifest['source_manifest']['status'] ?? '') === 'verified', 'Packaged source MANIFEST hashes verified on real WordPress filesystem');
 assert_wp_marketplace(($manifest['deployment_parity'] ?? '') === 'unverified', 'Installed manifest never falsely claims GitHub/live parity');
-assert_wp_marketplace(($manifest['archive_sha256'] ?? 'not-null') === null, 'Installed manifest SHA never impersonates a ZIP checksum');
+assert_wp_marketplace(array_key_exists('archive_sha256', $manifest) && $manifest['archive_sha256'] === null, 'Installed manifest SHA never impersonates a ZIP checksum');
 
 $search = MKT_Listings::search(['limit' => 20]);
 assert_wp_marketplace(is_array($search) && !array_key_exists('error', $search) && $search['items'] === [], 'Anonymous-ready empty public search uses real SQL');
