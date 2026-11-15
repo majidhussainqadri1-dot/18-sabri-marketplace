@@ -15,8 +15,14 @@ function wp_http_validate_url($v):bool{
     $p=parse_url((string)$v);
     return is_array($p)&&($p['scheme']??'')==='https'&&($p['host']??'')==='sabrihomeopathy.com';
 }
-function add_filter(...$a):void{}
+$GLOBALS['registered_filters']=[];
+$GLOBALS['eager_registry_calls']=0;
+function add_filter(...$a):void{$GLOBALS['registered_filters'][]=$a[0]??'';}
 function add_action(...$a):void{}
+function sabri_file26_register_connector($manifest):bool{
+    $GLOBALS['eager_registry_calls']++;
+    return true;
+}
 function get_option($n,$d=false){return $n==='mkt_safe_mode'?$GLOBALS['safe_mode']:$d;}
 $GLOBALS['safe_mode']=true;
 $GLOBALS['schema_ready']=true;
@@ -79,6 +85,9 @@ function row(int $id,string $status='active',string $seller='approved'):array{
 $wpdb=new StubDB();
 $wpdb->rows=[row(1),row(2,'draft'),row(3),array_merge(row(4),['recalled'=>true]),row(5,'active','suspended')];
 require dirname(__DIR__).'/includes/class-mkt-file26-connector.php';
+MKT_File26_Connector::register();
+ok($GLOBALS['eager_registry_calls']===0,'File26 schema-unverified eager registration prohibited');
+ok($GLOBALS['registered_filters']===['sabri_file26_connector_manifests'],'Exactly one schema-verified File26 manifest hook');
 $m=MKT_File26_Connector::manifest();
 ok($m['status']==='proposed','connector remains unapproved');
 ok(str_contains((string)($m['event_contract']??''),'pending-file26-cutover'),'File26 cutover must remain pending');

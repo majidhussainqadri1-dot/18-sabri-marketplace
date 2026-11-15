@@ -177,6 +177,8 @@ jobs:
         run: php 18-marketplace/tests/test-rc31-file26-public-source.php
       - name: Client listing card safe URL and malformed response regression
         run: node 18-marketplace/tests/test-rc32-client-listing-card.mjs
+      - name: Structured JSON-LD seller text cannot escape script node
+        run: php 18-marketplace/tests/test-rc33-structured-data-boundary.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes

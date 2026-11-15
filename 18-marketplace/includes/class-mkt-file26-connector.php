@@ -12,9 +12,10 @@ defined('ABSPATH') || exit;
 final class MKT_File26_Connector {
     const SLUG='file18-public-listings';
     public static function register(){
+        // Register through File26's schema-verified boot, never eagerly at plugin
+        // file-load time. Otherwise plugin load order can write connector records
+        // before File26's migrations and can register the same source twice.
         add_filter('sabri_file26_connector_manifests',array(__CLASS__,'append'),20);
-        add_action('sabri_file26_connectors_ready',array(__CLASS__,'ready'),20);
-        if(function_exists('sabri_file26_register_connector')){sabri_file26_register_connector(self::manifest());}
     }
     public static function manifest(){
         return array(

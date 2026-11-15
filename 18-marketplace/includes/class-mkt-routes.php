@@ -140,7 +140,7 @@ final class MKT_Routes {
         if ($image) {
             $schema['image'] = esc_url_raw((string) $image);
         }
-        echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>' . "\n";
+        echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . '</script>' . "\n";
     }
 
     public static function document_title(array $parts): array {
