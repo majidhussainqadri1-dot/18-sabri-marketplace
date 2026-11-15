@@ -3,6 +3,7 @@
 declare(strict_types=1);
 defined('ABSPATH') || define('ABSPATH', __DIR__);
 defined('ARRAY_A') || define('ARRAY_A', 'ARRAY_A');
+function is_wp_error($value):bool{return $value instanceof WP_Error;}
 function sanitize_key($v):string{return strtolower((string)$v);}
 function sanitize_text_field($v):string{return strip_tags((string)$v);}
 function rest_ensure_response($v){return new WP_REST_Response($v,200);}
