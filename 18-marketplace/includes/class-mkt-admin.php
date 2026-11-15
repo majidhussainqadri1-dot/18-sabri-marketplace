@@ -75,12 +75,21 @@ final class MKT_Admin {
         $checks[] = ['id' => 'dead_letter', 'label' => 'No unresolved dead-letter events', 'pass' => $dead === 0, 'severity' => 'warning', 'count' => $dead];
         $blocked_handoffs = $table_status['migration_handoffs'] ? (int) $wpdb->get_var("SELECT COUNT(*) FROM " . MKT_DB::table('migration_handoffs') . " WHERE status='blocked'") : -1;
         $checks[] = ['id' => 'migration_handoffs', 'label' => 'No blocked File 17 migration handoffs', 'pass' => $blocked_handoffs === 0, 'severity' => 'warning', 'count' => $blocked_handoffs];
+        $reality = MKT_Deployment_Reality::snapshot();
+        $checks[] = [
+            'id'=>'deployed_manifest',
+            'label'=>'Exact installed File18 source-manifest integrity (not repository parity)',
+            'pass'=>($reality['source_manifest']['status']??'')==='verified',
+            'severity'=>'warning',
+            'count'=>(int)($reality['source_manifest']['files_checked']??0),
+        ];
         $audit_check = $table_status['audit'] ? MKT_Audit::verify_chain(500) : ['valid' => false, 'checked' => 0, 'breaks' => 1, 'lock_gaps' => 0];
         $checks[] = ['id' => 'audit_chain', 'label' => 'Audit-chain integrity (latest 500)', 'pass' => !empty($audit_check['valid']), 'severity' => 'warning', 'count' => (int) ($audit_check['breaks'] ?? 0) + (int) ($audit_check['lock_gaps'] ?? 0)];
         return [
             'module' => 'file-18-marketplace',
             'version' => MKT_VERSION,
             'schema_version' => (string) get_option('mkt_schema_version', ''),
+            'deployment_reality' => $reality,
             'commission_percent' => 0,
             'settings' => MKT_DB::settings(),
             'integrations' => $integrations,
@@ -213,6 +222,18 @@ final class MKT_Admin {
         <p><strong><?php esc_html_e('Current gate:', 'marketplace'); ?></strong> <?php echo esc_html((string) $status['overall']); ?> — <?php esc_html_e('This screen does not claim staging or production acceptance.', 'marketplace'); ?></p>
         <table class="widefat striped"><thead><tr><th><?php esc_html_e('Check', 'marketplace'); ?></th><th><?php esc_html_e('Result', 'marketplace'); ?></th><th><?php esc_html_e('Severity', 'marketplace'); ?></th></tr></thead><tbody>
         <?php foreach ($status['checks'] as $check): ?><tr><td><?php echo esc_html($check['label']); ?></td><td><?php echo $check['pass'] ? '✅ PASS' : '❌ FAIL'; ?><?php if (isset($check['count'])) echo ' (' . esc_html((string) $check['count']) . ')'; ?></td><td><?php echo esc_html($check['severity']); ?></td></tr><?php endforeach; ?>
+        </tbody></table>
+        <?php $reality=$status['deployment_reality']; ?>
+        <h2><?php esc_html_e('Read-only deployment evidence', 'marketplace'); ?></h2>
+        <p><?php esc_html_e('This is installed-file and wp_options evidence. It does not establish GitHub parity, archive checksum equivalence, staging acceptance or live incident resolution.', 'marketplace'); ?></p>
+        <table class="widefat striped"><tbody>
+        <tr><th><?php esc_html_e('Installed source manifest', 'marketplace'); ?></th><td><?php echo esc_html((string)$reality['source_manifest']['status']); ?></td></tr>
+        <tr><th><?php esc_html_e('Files verified', 'marketplace'); ?></th><td><?php echo esc_html((string)$reality['source_manifest']['files_checked']); ?></td></tr>
+        <tr><th><?php esc_html_e('File differences', 'marketplace'); ?></th><td><?php echo esc_html((string)$reality['source_manifest']['mismatch_count']); ?></td></tr>
+        <tr><th><?php esc_html_e('Undeclared files', 'marketplace'); ?></th><td><?php echo esc_html((string)$reality['source_manifest']['extra_file_count']); ?></td></tr>
+        <tr><th><?php esc_html_e('Manifest SHA-256', 'marketplace'); ?></th><td><code><?php echo esc_html((string)$reality['source_manifest']['manifest_sha256']); ?></code></td></tr>
+        <tr><th><?php esc_html_e('PHP / WordPress / MySQL', 'marketplace'); ?></th><td><?php echo esc_html(implode(' / ',[(string)$reality['runtime']['php'],(string)$reality['runtime']['wordpress'],(string)$reality['runtime']['mysql']])); ?></td></tr>
+        <tr><th><?php esc_html_e('Database migration markers', 'marketplace'); ?></th><td><pre><?php foreach($reality['migration_markers'] as $name=>$value)echo esc_html($name.': '.(string)$value)."\n"; ?></pre></td></tr>
         </tbody></table>
         <?php if (current_user_can('manage_options')): ?>
         <h2><?php esc_html_e('Operational controls', 'marketplace'); ?></h2>

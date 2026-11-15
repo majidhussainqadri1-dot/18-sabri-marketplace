@@ -189,6 +189,8 @@ jobs:
         run: php 18-marketplace/tests/test-rc37-localization.php
       - name: Recall notice cannot republish a private listing
         run: php 18-marketplace/tests/test-rc38-recall-privacy-boundary.php
+      - name: Deployed manifest / migration marker source-truth regression
+        run: php 18-marketplace/tests/test-rc40-deployed-reality.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
