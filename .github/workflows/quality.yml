@@ -197,6 +197,8 @@ jobs:
         run: php 18-marketplace/tests/test-rc44-public-search-projection-failclosed.php
       - name: Public Marketplace media metadata redaction and rights regression
         run: php 18-marketplace/tests/test-rc45-public-media-metadata.php
+      - name: Strict public cursor and HTTP 400 / 410 regression
+        run: php 18-marketplace/tests/test-rc47-public-cursor-validation.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes

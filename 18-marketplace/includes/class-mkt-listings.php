@@ -630,7 +630,15 @@ final class MKT_Listings {
         }
         global $wpdb;
         $limit = min(50, max(1, (int) ($filters['limit'] ?? 20)));
-        $cursor = max(0, (int) ($filters['cursor'] ?? 0));
+        $raw_cursor = $filters['cursor'] ?? '';
+        if (!is_int($raw_cursor) && !is_string($raw_cursor)) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_cursor'];
+        }
+        $cursor_value = (string) $raw_cursor;
+        if ($cursor_value !== '' && !preg_match('/^(0|[1-9][0-9]{0,17})$/D', $cursor_value)) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_cursor'];
+        }
+        $cursor = (int) $raw_cursor;
         $where = [];
         $params = [];
         if (!$private) {

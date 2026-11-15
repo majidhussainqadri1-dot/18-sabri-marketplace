@@ -54,16 +54,25 @@ final class MKT_Finalization {
             'limit' => $request->get_param('limit'),
         ]);
         // A database outage is not a successful empty public result.
-        if (($result['error'] ?? '') === 'search_unavailable') {
-            return new WP_REST_Response($result, 503);
-        }
+        $error = (string) ($result['error'] ?? '');
+        if ($error === 'search_unavailable') return new WP_REST_Response($result, 503);
+        if ($error === 'cursor_expired') return new WP_REST_Response($result, 410);
+        if (str_starts_with($error, 'invalid_')) return new WP_REST_Response($result, 400);
         return rest_ensure_response($result);
     }
 
     public static function search_array(array $filters): array {
         global $wpdb;
         $limit = min(50, max(1, (int) ($filters['limit'] ?? 20)));
-        $cursor = max(0, (int) ($filters['cursor'] ?? 0));
+        $raw_cursor = $filters['cursor'] ?? '';
+        if (!is_int($raw_cursor) && !is_string($raw_cursor)) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_cursor'];
+        }
+        $cursor_value = (string) $raw_cursor;
+        if ($cursor_value !== '' && !preg_match('/^(0|[1-9][0-9]{0,17})$/D', $cursor_value)) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_cursor'];
+        }
+        $cursor = (int) $raw_cursor;
         $where = ["l.status='active'", "s.status='approved'", "l.expires_at>UTC_TIMESTAMP()", "NOT EXISTS (SELECT 1 FROM " . MKT_Governance::table('recalls') . " r WHERE r.listing_public_id=l.public_id AND r.status='active')"];
         $params = [];
 
