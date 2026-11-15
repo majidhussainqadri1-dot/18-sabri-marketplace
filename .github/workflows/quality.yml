@@ -203,6 +203,8 @@ jobs:
         run: php 18-marketplace/tests/test-rc48-core-search-projection-failclosed.php
       - name: Strict public marketplace min/max price and overflow regression
         run: php 18-marketplace/tests/test-rc49-public-price-bounds.php
+      - name: REST post-dispatch evidence and recall SQL fail-closed response regression
+        run: php 18-marketplace/tests/test-rc50-rest-safety-projection.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
