@@ -84,8 +84,20 @@ final class MKT_Finalization {
         if ($city !== '') { $where[] = 'l.location_city=%s'; $params[] = $city; }
         $currency = sanitize_text_field((string) ($filters['currency'] ?? ''));
         if ($currency !== '') { $where[] = 'l.currency=%s'; $params[] = MKT_DB::currency($currency); }
-        if (($filters['price_min'] ?? '') !== '' && $filters['price_min'] !== null) { $where[] = 'l.price>=%f'; $params[] = max(0, (float) $filters['price_min']); }
-        if (($filters['price_max'] ?? '') !== '' && $filters['price_max'] !== null) { $where[] = 'l.price<=%f'; $params[] = max(0, (float) $filters['price_max']); }
+        $bounds = [];
+        foreach (['price_min','price_max'] as $key) {
+            $raw = $filters[$key] ?? null;
+            if ($raw === null || $raw === '') continue;
+            if (!is_numeric($raw) || !is_finite((float)$raw) || (float)$raw < 0 || (float)$raw > 9999999999999999) {
+                return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_price_range'];
+            }
+            $bounds[$key] = (float) $raw;
+        }
+        if (isset($bounds['price_min'],$bounds['price_max']) && $bounds['price_min'] > $bounds['price_max']) {
+            return ['items'=>[], 'next_cursor'=>null, 'has_more'=>false, 'error'=>'invalid_price_range'];
+        }
+        if (isset($bounds['price_min'])) { $where[] = 'l.price>=%f'; $params[] = $bounds['price_min']; }
+        if (isset($bounds['price_max'])) { $where[] = 'l.price<=%f'; $params[] = $bounds['price_max']; }
 
         $availability = sanitize_key((string) ($filters['availability'] ?? ''));
         if ($availability !== '') {

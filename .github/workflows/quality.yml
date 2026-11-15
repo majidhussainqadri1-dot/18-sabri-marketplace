@@ -201,6 +201,8 @@ jobs:
         run: php 18-marketplace/tests/test-rc47-public-cursor-validation.php
       - name: Canonical core owner search media failure returns safe unavailable state
         run: php 18-marketplace/tests/test-rc48-core-search-projection-failclosed.php
+      - name: Strict public marketplace min/max price and overflow regression
+        run: php 18-marketplace/tests/test-rc49-public-price-bounds.php
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes
