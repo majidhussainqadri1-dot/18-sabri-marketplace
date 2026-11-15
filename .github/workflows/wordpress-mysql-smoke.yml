@@ -56,7 +56,7 @@ jobs:
             --url=http://127.0.0.1:8000 --title=Marketplace-CI \
             --admin_user=ciadmin --admin_password=ci_disposable_admin_password \
             --admin_email=ci@example.invalid --skip-email --path="$WP_PATH" --allow-root
-          unzip -q "$RUNNER_TEMP/marketplace-build/18-marketplace-2.1.0-RC39.zip" -d "$WP_PATH/wp-content/plugins"
+          unzip -q "$RUNNER_TEMP/marketplace-build/18-marketplace-2.1.0-RC54.zip" -d "$WP_PATH/wp-content/plugins"
           php "$RUNNER_TEMP/wp-cli.phar" plugin activate 18-marketplace --path="$WP_PATH" --allow-root
           php "$RUNNER_TEMP/wp-cli.phar" eval-file \
             "$GITHUB_WORKSPACE/18-marketplace/tests/wp-real-mysql-smoke.php" \
