@@ -179,6 +179,8 @@ jobs:
         run: node 18-marketplace/tests/test-rc32-client-listing-card.mjs
       - name: Structured JSON-LD seller text cannot escape script node
         run: php 18-marketplace/tests/test-rc33-structured-data-boundary.php
+      - name: Browser offer retry idempotency and saved UI state regression
+        run: node 18-marketplace/tests/test-rc34-client-offer-retry.mjs
       - name: Full static aggregate gate
         run: bash 18-marketplace/tests/qa-static.sh
       - name: Forty counted full static and regression passes

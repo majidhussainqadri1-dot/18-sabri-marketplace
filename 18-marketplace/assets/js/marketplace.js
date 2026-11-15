@@ -18,6 +18,18 @@
     } catch { return ''; }
   }
   const idempotency = prefix => `${prefix}:${Date.now()}:${crypto.getRandomValues(new Uint32Array(2)).join('-')}`;
+  // A timeout can occur AFTER the offer was committed. Retrying the identical
+  // offer must reuse its request key; edited terms constitute a new command.
+  // Keep the request fingerprint in memory, never in HTML or localStorage.
+  const pendingOffers = new WeakMap();
+  function offerRequestKey(form, payload) {
+    const fingerprint = JSON.stringify(payload);
+    const pending = pendingOffers.get(form);
+    if (pending && pending.fingerprint === fingerprint) return pending.key;
+    const key = idempotency('offer');
+    pendingOffers.set(form, { fingerprint, key });
+    return key;
+  }
 
   async function api(path, options = {}) {
     const headers = { 'Accept': 'application/json', ...(options.headers || {}) };
@@ -95,7 +107,7 @@
     });
     qs('[data-mkt-save]', detail)?.addEventListener('click', async event => {
       const button = event.currentTarget; buttonBusy(button, true);
-      try { await api(`listings/${listingId}/save`, { method: 'POST', body: JSON.stringify({ save: true }) }); toast(app.strings?.saved || 'Saved.'); button.textContent = '♥ Saved'; }
+      try { await api(`listings/${listingId}/save`, { method: 'POST', body: JSON.stringify({ save: true }) }); toast(app.strings?.saved || 'Saved.'); button.dataset.originalText = '♥ Saved'; }
       catch (error) { toast(error.message, 'error'); }
       finally { buttonBusy(button, false); }
     });
@@ -103,8 +115,8 @@
     qs('[data-mkt-report]', detail)?.addEventListener('click', () => openModal(qs('[data-mkt-report-modal]')));
     qs('[data-mkt-offer-form]')?.addEventListener('submit', async event => {
       event.preventDefault(); const form = event.currentTarget, button = qs('button[type=submit]', form); buttonBusy(button, true);
-      const payload = objectFromForm(form), key = idempotency('offer');
-      try { await api(`listings/${listingId}/offers`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(payload) }); closeModal(form.closest('.mkt-modal')); form.reset(); toast('Offer submitted.'); }
+      const payload = objectFromForm(form), key = offerRequestKey(form, payload);
+      try { await api(`listings/${listingId}/offers`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(payload) }); pendingOffers.delete(form); closeModal(form.closest('.mkt-modal')); form.reset(); toast('Offer submitted.'); }
       catch (error) { toast(error.message, 'error'); }
       finally { buttonBusy(button, false); }
     });
